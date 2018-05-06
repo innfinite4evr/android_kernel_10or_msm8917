@@ -23,9 +23,6 @@
 
 #define MAX_ISP_V4l2_EVENTS 100
 #define MAX_ISP_REG_LIST 100
-//03137901 begin
-#define CONFIG_MSM_ISP_DBG 1
-//03137901 end
 static DEFINE_MUTEX(bandwidth_mgr_mutex);
 static struct msm_isp_bandwidth_mgr isp_bandwidth_mgr;
 

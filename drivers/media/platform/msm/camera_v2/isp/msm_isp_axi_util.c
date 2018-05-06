@@ -16,9 +16,7 @@
 #include "msm_isp_axi_util.h"
 
 #define HANDLE_TO_IDX(handle) (handle & 0xFF)
-//03137901 begin
-#define ISP_SOF_DEBUG_COUNT 200
-//03137901 end
+#define ISP_SOF_DEBUG_COUNT 0
 static int msm_isp_update_dual_HW_ms_info_at_start(
 	struct vfe_device *vfe_dev,
 	enum msm_vfe_input_src stream_src,
@@ -512,11 +510,8 @@ static void msm_isp_cfg_framedrop_reg(struct vfe_device *vfe_dev,
 	if (!runtime_init_frame_drop)
 		framedrop_period = stream_info->current_framedrop_period;
 
-	if (MSM_VFE_STREAM_STOP_PERIOD != framedrop_period){
+	if (MSM_VFE_STREAM_STOP_PERIOD != framedrop_period)
 		framedrop_pattern = 0x1;
-		if(framedrop_period > 1)
-			framedrop_pattern = framedrop_pattern << (framedrop_period-1);
-	}
 
 	ISP_DBG("%s: stream %x framedrop pattern %x period %u\n", __func__,
 		stream_info->stream_handle, framedrop_pattern,

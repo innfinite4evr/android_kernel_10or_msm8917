@@ -39,11 +39,10 @@
 		smd11 = &smdtty_data11;
 		smd21 = &smdtty_data21;
 		smd36 = &smdtty_loopback;
-//		spi7 = &spi_7;
+		spi3 = &spi_3;
 		i2c2 = &i2c_2;
 		i2c5 = &i2c_5;
 		i2c3 = &i2c_3;
-		i2c6 = &i2c_6;
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 for SD card */
 	};
@@ -427,8 +426,6 @@
 		};
 	};
 
-	/********************begin********************
-	 * The bcl function not support 3rd party FG *
 	qcom,bcl {
 		compatible = "qcom,bcl";
 		qcom,bcl-enable;
@@ -446,7 +443,6 @@
 			qcom,thermal-handle = <&msm_thermal_freq>;
 		};
 	};
-	******************end**********************/
 
 	blsp1_uart2: serial@78b0000 {
 		compatible = "qcom,msm-lsuart-v14";
@@ -498,16 +494,16 @@
 			<&dma_blsp1 7 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 
-		/*pericom-type-c@1d {
+		pericom-type-c@1d {
 			compatible = "pericom,usb-type-c";
 			reg = <0x1d>;
 			vdd_io-supply = <&pm8917_l5>;
 			interrupt-parent = <&tlmm>;
-			interrupts = <97 2>;	// TLMM 97, TRIGGER_FALLING
-			pericom,enb-gpio = <&tlmm 131 0x1>;	// active low
+			interrupts = <97 2>;	/* TLMM 97, TRIGGER_FALLING */
+			pericom,enb-gpio = <&tlmm 131 0x1>;	/* active low */
 			pinctrl-names = "default";
 			pinctrl-0 = <&usbc_int_default>;
-		};*/
+		};
 	};
 
 	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
@@ -518,7 +514,7 @@
 		reg = <0x78b7000 0x600>;
 		interrupt-names = "qup_irq";
 		interrupts = <0 97 0>;
-		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -558,31 +554,6 @@
 		qcom,master-id = <84>;
 		dmas = <&dma_blsp2 4 64 0x20000020 0x20>,
 			<&dma_blsp2 5 32 0x20000020 0x20>;
-		dma-names = "tx", "rx";
-	};
-
-	i2c_6: i2c@7af6000 { /* BLSP2 QUP2 */
-		compatible = "qcom,i2c-msm-v2";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		reg = <0x7af6000 0x600>;
-		interrupt-names = "qup_irq";
-		interrupts = <0 300 0>;
-		qcom,clk-freq-out = <100000>;
-		qcom,clk-freq-in = <19200000>;
-		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
-			<&clock_gcc clk_gcc_blsp2_qup2_i2c_apps_clk>;
-
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&i2c_6_active>;
-		pinctrl-1 = <&i2c_6_sleep>;
-		qcom,noise-rjct-scl = <0>;
-		qcom,noise-rjct-sda = <0>;
-		qcom,master-id = <84>;
-		dmas = <&dma_blsp2 6 64 0x20000020 0x20>,
-			<&dma_blsp2 7 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 	};
 
@@ -781,7 +752,7 @@
 		HSUSB_1p8-supply = <&pm8917_l7>;
 		HSUSB_3p3-supply = <&pm8917_l13>;
 		qcom,vdd-voltage-level = <0 1200000 1200000>;
-		//vbus_otg-supply = <&smbcharger_charger_otg>;
+		vbus_otg-supply = <&smbcharger_charger_otg>;
 
 		qcom,hsusb-otg-phy-type = <3>; /* SNPS Femto PHY */
 		qcom,hsusb-otg-mode = <3>; /* OTG mode */
@@ -793,7 +764,6 @@
 		qcom,boost-sysclk-with-streaming;
 		qcom,axi-prefetch-enable;
 		qcom,enable-sdp-typec-current-limit;
-		qcom,floated-charger-enable = <1>;
 		qcom,hsusb-otg-delay-lpm;
 
 		qcom,msm-bus,name = "usb2";
@@ -996,13 +966,6 @@
 		compatible = "qcom,jtag-fuse-v2";
 		reg = <0xa601c 0x8>;
 		reg-names = "fuse-base";
-	};
-
-	sn_fuse: snfuse@0xA4128 {
-	    compatible = "qcom,sn-fuse";
-	    reg = <0xA4128 0x4>,
-		  <0xA6034 0x4>;
-	    reg-names = "sn-base","fuse-state";
 	};
 
 	jtag_mm0: jtagmm@61bc000 {
@@ -1544,94 +1507,6 @@
 		qcom,master-id = <86>;
 		status = "disabled";
 	};
-
-/*
-	spi_7: spi@7af7000 {
-		compatible = "qcom,spi-qup-v2";
-		reg-names = "spi_physical", "spi_bam_physical";
-		reg = <0x7af7000 0x600>,
-			<0x7ac4000 0x1f000>;
-		interrupt-names = "spi_irq", "spi_bam_irq";
-		interrupts = <0 301 0>, <0 239 0>;
-		spi-max-frequency = <19200000>;
-		pinctrl-names = "spi_default", "spi_sleep";
-		pinctrl-0 = <&spi7_default &spi7_cs0_active>;
-		pinctrl-1 = <&spi7_sleep &spi7_cs0_sleep>;
-		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
-				<&clock_gcc clk_gcc_blsp2_qup3_spi_apps_clk>;
-		clock-names = "iface_clk", "core_clk";
-		qcom,infinite-mode = <0>;
-		qcom,use-bam;
-		qcom,use-pinctrl;
-		qcom,ver-reg-exists;
-		qcom,bam-consumer-pipe-index = <8>;
-		qcom,bam-producer-pipe-index = <9>;
-		qcom,master-id = <84>;
-		status = "okay";
-
-        cdfinger@0 {
-            compatible = "cdfinger,fps998";
-	    	interrupt-parent = <&tlmm>;
-			reg = <0>;
-			spi-max-frequency = <8000000>;
-            spi-cpol = <1>;
-            spi-cpha = <1>;
-			interrupts = <124 0x0>;
-    	    vdd-supply = <&pm8917_l10>;
-    	    vio-supply = <&pm8917_l6>;
-			
-   		     pinctrl-names = "fingerprint_reset_active",
-   		             "fingerprint_reset_suspend",
-   		             "fingerprint_irq";
-
-    	    pinctrl-0 = <&fps_reset_active>;
-    	    pinctrl-1 = <&fps_reset_suspend>;
-   		    pinctrl-2 = <&fps_irq_active>;
-			cdfinger,reset_gpio = <&tlmm 132 0>;
-			cdfinger,irq_gpio = <&tlmm 124 0>;
-			interrupt-names = "cdfinger_wake_up";
-			status = "okay";
-    	};
-	};
-*/
-
-    cdfinger@0 {
-        compatible = "cdfinger,fps998";
-        interrupt-parent = <&tlmm>;
-        reg = <0>;
-        interrupts = <124 0x0>;
-        vdd-supply = <&pm8917_l10>;
-        vio-supply = <&pm8917_l6>;
-        pinctrl-names = "fingerprint_reset_active",
-                    "fingerprint_reset_suspend",
-                    "fingerprint_irq";
-        pinctrl-0 = <&fps_reset_active>;
-        pinctrl-1 = <&fps_reset_suspend>;
-        pinctrl-2 = <&fps_irq_active>;
-        cdfinger,reset_gpio = <&tlmm 132 0>;
-        cdfinger,irq_gpio = <&tlmm 124 0>;
-        interrupt-names = "cdfinger_wake_up";
-        status = "okay";
-    };
-
-    csfinger@0 {
-        compatible = "csfinger,cs358";
-        interrupt-parent = <&tlmm>;
-        reg = <0>;
-        interrupts = <124 0x0>;
-        vdd-supply = <&pm8917_l10>;
-        vio-supply = <&pm8917_l6>;
-        pinctrl-names = "fingerprint_reset_active",
-                    "fingerprint_reset_suspend",
-                    "fingerprint_irq";
-        pinctrl-0 = <&fps_reset_active>;
-        pinctrl-1 = <&fps_reset_suspend>;
-        pinctrl-2 = <&fps_irq_active>;
-        cdfinger,reset_gpio = <&tlmm 132 0>;
-        cdfinger,irq_gpio = <&tlmm 124 0>;
-        interrupt-names = "cdfinger_wake_up";
-        status = "okay";
-    };
 
 	qcom,inrush-current {
 		compatible = "qcom,msm-inrush-current-mitigation";

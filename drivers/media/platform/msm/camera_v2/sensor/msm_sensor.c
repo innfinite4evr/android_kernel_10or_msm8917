@@ -18,17 +18,6 @@
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
 
-//// add for gc5005 OTP
-#define gc5025_USE_OTP
-
-#ifdef gc5025_USE_OTP
-void gc5025_gcore_identify_otp(struct msm_sensor_ctrl_t *s_ctrl);
-#endif
-////end OTP
-
-extern int qcom_module_id;
-
-/*#define CONFIG_MSMB_CAMERA_DEBUG*/
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
@@ -251,14 +240,6 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-//// add for gc5005 OTP
-#ifdef gc5025_USE_OTP
-	if(!strcmp(sensor_name,"gc5025")){
-		pr_err("5025k enter gc5025otp");
-		gc5025_gcore_identify_otp(s_ctrl);
-		}
-#endif
-////end OTP
 	pr_debug("%s: read id: 0x%x expected id 0x%x:\n",
 			__func__, chipid, slave_info->sensor_id);
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
@@ -266,23 +247,6 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 				__func__, chipid, slave_info->sensor_id);
 		return -ENODEV;
 	}
-
-	printk("Brave: %s:%d sensor name = %s, module id=0x%x\n", __func__, __LINE__, sensor_name,  qcom_module_id);
-	if (strcmp(sensor_name, "hi1332_holitech_tlq8699m") == 0) {
-		if (qcom_module_id == 0x42) {
-			return 0;
-		} else {
-			return -EINVAL;
-		}
-	} else if (strcmp(sensor_name, "hi1332_truly_cmc824") == 0) {
-		if (qcom_module_id == 0x02) {
-			return 0;
-		} else {
-			return -EINVAL;
-		}
-
-	}
-
 	return rc;
 }
 

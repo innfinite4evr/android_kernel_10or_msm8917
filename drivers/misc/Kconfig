@@ -572,11 +572,6 @@ config TI_DRV2667
 	  To compile this driver as a module, choose M here: the
 	  module will be called ti_drv2667.
 
-config VIB_GPIO
-	tristate "Vibrator timed gpio driver"
-	depends on GPIOLIB && ANDROID_TIMED_OUTPUT
-	default n
-
 config QPNP_MISC
 	tristate "QPNP Misc Peripheral"
 	depends on SPMI || MSM_SPMI
@@ -585,12 +580,6 @@ config QPNP_MISC
 	  peripheral. The MISC peripheral holds the USB ID interrupt
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
-
-config SAR_SIMULATE
-	tristate "Sar_input simulate sar to reduce power"
-	default n
-	help
-		say 'y' here to include support for the sar_input driver.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

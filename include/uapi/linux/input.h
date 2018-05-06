@@ -481,8 +481,6 @@ struct input_keymap_entry {
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
-#define KEY_KONGKOU_CONNECT 0x284 /*add for kongkou test*/
-#define KEY_KONGKOU_UNCONNECT 0x285 /*add for kongkou test*/
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
