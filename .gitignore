@@ -96,3 +96,9 @@ x509.genkey
 
 # Kconfig presets
 all.config
+
+# custom
+linaro-7.2
+ubertc-4.9
+*.sh
+out
