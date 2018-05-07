@@ -10,6 +10,7 @@
  */
 
 #include <linux/err.h>
+#include <linux/module.h>
 #include <linux/pm_runtime.h>
 
 #include <linux/mmc/host.h>
@@ -27,6 +28,10 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include "sdio_cis.h"
+
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+#include <linux/mmc/sdio_ids.h>
+#endif
 
 static int sdio_read_fbr(struct sdio_func *func)
 {
@@ -182,6 +187,23 @@ static int sdio_read_cccr(struct mmc_card *card, u32 ocr)
 				card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_C;
 			if (data & SDIO_DRIVE_SDTD)
 				card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_D;
+
+			ret = mmc_io_rw_direct(card, 0, 0,
+				SDIO_CCCR_INTERRUPT_EXTENSION, 0, &data);
+			if (ret)
+				goto out;
+			if (data & SDIO_SUPPORT_ASYNC_INTR) {
+				if (card->host->caps2 &
+				    MMC_CAP2_ASYNC_SDIO_IRQ_4BIT_MODE) {
+					data |= SDIO_ENABLE_ASYNC_INTR;
+					ret = mmc_io_rw_direct(card, 1, 0,
+						SDIO_CCCR_INTERRUPT_EXTENSION,
+						data, NULL);
+					if (ret)
+						goto out;
+					card->cccr.async_intr_sup = 1;
+				}
+			}
 		}
 
 		/* if no uhs mode ensure we check for high speed */
@@ -200,12 +222,60 @@ out:
 	return ret;
 }
 
+static void sdio_enable_vendor_specific_settings(struct mmc_card *card)
+{
+	int ret;
+	u8 settings;
+
+	if (mmc_enable_qca6574_settings(card) ||
+		mmc_enable_qca9377_settings(card)) {
+		ret = mmc_io_rw_direct(card, 1, 0, 0xF2, 0x0F, NULL);
+		if (ret) {
+			pr_crit("%s: failed to write to fn 0xf2 %d\n",
+					mmc_hostname(card->host), ret);
+			goto out;
+		}
+
+		ret = mmc_io_rw_direct(card, 0, 0, 0xF1, 0, &settings);
+		if (ret) {
+			pr_crit("%s: failed to read fn 0xf1 %d\n",
+					mmc_hostname(card->host), ret);
+			goto out;
+		}
+
+		settings |= 0x80;
+		ret = mmc_io_rw_direct(card, 1, 0, 0xF1, settings, NULL);
+		if (ret) {
+			pr_crit("%s: failed to write to fn 0xf1 %d\n",
+					mmc_hostname(card->host), ret);
+			goto out;
+		}
+
+		ret = mmc_io_rw_direct(card, 0, 0, 0xF0, 0, &settings);
+		if (ret) {
+			pr_crit("%s: failed to read fn 0xf0 %d\n",
+					mmc_hostname(card->host), ret);
+			goto out;
+		}
+
+		settings |= 0x20;
+		ret = mmc_io_rw_direct(card, 1, 0, 0xF0, settings, NULL);
+		if (ret) {
+			pr_crit("%s: failed to write to fn 0xf0 %d\n",
+					mmc_hostname(card->host), ret);
+			goto out;
+		}
+	}
+out:
+	return;
+}
+
 static int sdio_enable_wide(struct mmc_card *card)
 {
 	int ret;
 	u8 ctrl;
 
-	if (!(card->host->caps & MMC_CAP_4_BIT_DATA))
+	if (!(card->host->caps & (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA)))
 		return 0;
 
 	if (card->cccr.low_speed && !card->cccr.wide_bus)
@@ -221,7 +291,10 @@ static int sdio_enable_wide(struct mmc_card *card)
 
 	/* set as 4-bit bus width */
 	ctrl &= ~SDIO_BUS_WIDTH_MASK;
-	ctrl |= SDIO_BUS_WIDTH_4BIT;
+	if (card->host->caps & MMC_CAP_8_BIT_DATA)
+		ctrl |= SDIO_BUS_WIDTH_8BIT;
+	else if (card->host->caps & MMC_CAP_4_BIT_DATA)
+		ctrl |= SDIO_BUS_WIDTH_4BIT;
 
 	ret = mmc_io_rw_direct(card, 1, 0, SDIO_CCCR_IF, ctrl, NULL);
 	if (ret)
@@ -262,7 +335,7 @@ static int sdio_disable_wide(struct mmc_card *card)
 	int ret;
 	u8 ctrl;
 
-	if (!(card->host->caps & MMC_CAP_4_BIT_DATA))
+	if (!(card->host->caps & (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA)))
 		return 0;
 
 	if (card->cccr.low_speed && !card->cccr.wide_bus)
@@ -272,10 +345,10 @@ static int sdio_disable_wide(struct mmc_card *card)
 	if (ret)
 		return ret;
 
-	if (!(ctrl & SDIO_BUS_WIDTH_4BIT))
+	if (!(ctrl & (SDIO_BUS_WIDTH_4BIT | SDIO_BUS_WIDTH_8BIT)))
 		return 0;
 
-	ctrl &= ~SDIO_BUS_WIDTH_4BIT;
+	ctrl &= ~(SDIO_BUS_WIDTH_4BIT | SDIO_BUS_WIDTH_8BIT);
 	ctrl |= SDIO_BUS_ASYNC_INT;
 
 	ret = mmc_io_rw_direct(card, 1, 0, SDIO_CCCR_IF, ctrl, NULL);
@@ -520,6 +593,9 @@ static int sdio_set_bus_speed_mode(struct mmc_card *card)
 	if (err)
 		return err;
 
+	/* Vendor specific settings based on card quirks */
+	sdio_enable_vendor_specific_settings(card);
+
 	speed &= ~SDIO_SPEED_BSS_MASK;
 	speed |= bus_speed;
 	err = mmc_io_rw_direct(card, 1, 0, SDIO_CCCR_SPEED, speed, NULL);
@@ -567,11 +643,17 @@ static int mmc_sdio_init_uhs_card(struct mmc_card *card)
 	 * SPI mode doesn't define CMD19 and tuning is only valid for SDR50 and
 	 * SDR104 mode SD-cards. Note that tuning is mandatory for SDR104.
 	 */
-	if (!mmc_host_is_spi(card->host) &&
-	    ((card->host->ios.timing == MMC_TIMING_UHS_SDR50) ||
-	      (card->host->ios.timing == MMC_TIMING_UHS_SDR104)))
-		err = mmc_execute_tuning(card);
+	if (!mmc_host_is_spi(card->host) && card->host->ops->execute_tuning &&
+			((card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR50) ||
+			 (card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR104))) {
+		mmc_host_clk_hold(card->host);
+		err = card->host->ops->execute_tuning(card->host,
+						      MMC_SEND_TUNING_BLOCK);
+		mmc_host_clk_release(card->host);
+	}
+
 out:
+
 	return err;
 }
 
@@ -651,8 +733,11 @@ try_again:
 	/*
 	 * Call the optional HC's init_card function to handle quirks.
 	 */
-	if (host->ops->init_card)
+	if (host->ops->init_card) {
+		mmc_host_clk_hold(host);
 		host->ops->init_card(host, card);
+		mmc_host_clk_release(host);
+	}
 
 	/*
 	 * If the host and card support UHS-I mode request the card
@@ -663,7 +748,7 @@ try_again:
 	 */
 	if (!powered_resume && (rocr & ocr & R4_18V_PRESENT)) {
 		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180,
-					ocr_card);
+					ocr);
 		if (err == -EAGAIN) {
 			sdio_reset(host);
 			mmc_go_idle(host);
@@ -732,19 +817,35 @@ try_again:
 		goto finish;
 	}
 
-	/*
-	 * Read the common registers.
-	 */
-	err = sdio_read_cccr(card, ocr);
-	if (err)
-		goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	if (host->embedded_sdio_data.cccr)
+		memcpy(&card->cccr, host->embedded_sdio_data.cccr, sizeof(struct sdio_cccr));
+	else {
+#endif
+		/*
+		 * Read the common registers.
+		 */
+		err = sdio_read_cccr(card,  ocr);
+		if (err)
+			goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	}
+#endif
 
-	/*
-	 * Read the common CIS tuples.
-	 */
-	err = sdio_read_common_cis(card);
-	if (err)
-		goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	if (host->embedded_sdio_data.cis)
+		memcpy(&card->cis, host->embedded_sdio_data.cis, sizeof(struct sdio_cis));
+	else {
+#endif
+		/*
+		 * Read the common CIS tuples.
+		 */
+		err = sdio_read_common_cis(card);
+		if (err)
+			goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	}
+#endif
 
 	if (oldcard) {
 		int same = (card->cis.vendor == oldcard->cis.vendor &&
@@ -803,9 +904,12 @@ try_again:
 		 * Switch to wider bus (if supported).
 		 */
 		err = sdio_enable_4bit_bus(card);
-		if (err > 0)
-			mmc_set_bus_width(card->host, MMC_BUS_WIDTH_4);
-		else if (err)
+		if (err > 0) {
+			if (card->host->caps & MMC_CAP_8_BIT_DATA)
+				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_8);
+			else if (card->host->caps & MMC_CAP_4_BIT_DATA)
+				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_4);
+		} else if (err)
 			goto remove;
 	}
 finish:
@@ -932,6 +1036,7 @@ static int mmc_sdio_pre_suspend(struct mmc_host *host)
  */
 static int mmc_sdio_suspend(struct mmc_host *host)
 {
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	if (mmc_card_keep_power(host) && mmc_card_wake_sdio_irq(host)) {
 		mmc_claim_host(host);
 		sdio_disable_wide(host->card);
@@ -940,6 +1045,9 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 
 	if (!mmc_card_keep_power(host))
 		mmc_power_off(host);
+	else if (host->ios.clock)
+		mmc_gate_clock(host);
+	MMC_TRACE(host, "%s: Exit\n", __func__);
 
 	return 0;
 }
@@ -951,6 +1059,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
 
@@ -980,7 +1089,10 @@ static int mmc_sdio_resume(struct mmc_host *host)
 		/* We may have switched to 1-bit mode during suspend */
 		err = sdio_enable_4bit_bus(host->card);
 		if (err > 0) {
-			mmc_set_bus_width(host, MMC_BUS_WIDTH_4);
+			if (host->caps & MMC_CAP_8_BIT_DATA)
+				mmc_set_bus_width(host, MMC_BUS_WIDTH_8);
+			else if (host->caps & MMC_CAP_4_BIT_DATA)
+				mmc_set_bus_width(host, MMC_BUS_WIDTH_4);
 			err = 0;
 		}
 	}
@@ -998,6 +1110,8 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	mmc_release_host(host);
 
 	host->pm_flags &= ~MMC_PM_KEEP_POWER;
+	host->pm_flags &= ~MMC_PM_WAKE_SDIO_IRQ;
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 	return err;
 }
 
@@ -1137,14 +1251,36 @@ int mmc_attach_sdio(struct mmc_host *host)
 	funcs = (ocr & 0x70000000) >> 28;
 	card->sdio_funcs = 0;
 
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	if (host->embedded_sdio_data.funcs)
+		card->sdio_funcs = funcs = host->embedded_sdio_data.num_funcs;
+#endif
+
 	/*
 	 * Initialize (but don't add) all present functions.
 	 */
 	for (i = 0; i < funcs; i++, card->sdio_funcs++) {
-		err = sdio_init_func(host->card, i + 1);
-		if (err)
-			goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+		if (host->embedded_sdio_data.funcs) {
+			struct sdio_func *tmp;
 
+			tmp = sdio_alloc_func(host->card);
+			if (IS_ERR(tmp))
+				goto remove;
+			tmp->num = (i + 1);
+			card->sdio_func[i] = tmp;
+			tmp->class = host->embedded_sdio_data.funcs[i].f_class;
+			tmp->max_blksize = host->embedded_sdio_data.funcs[i].f_maxblksize;
+			tmp->vendor = card->cis.vendor;
+			tmp->device = card->cis.device;
+		} else {
+#endif
+			err = sdio_init_func(host->card, i + 1);
+			if (err)
+				goto remove;
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+		}
+#endif
 		/*
 		 * Enable Runtime PM for this func (if supported)
 		 */
@@ -1192,3 +1328,8 @@ err:
 	return err;
 }
 
+int sdio_reset_comm(struct mmc_card *card)
+{
+	return mmc_power_restore_host(card->host);
+}
+EXPORT_SYMBOL(sdio_reset_comm);

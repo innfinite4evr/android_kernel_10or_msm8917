@@ -8,7 +8,10 @@
  * paravirt and debugging variants are added.)
  */
 #undef CONFIG_PARAVIRT
-#undef CONFIG_PARAVIRT_SPINLOCKS
+#undef CONFIG_KASAN
+#ifdef CONFIG_X86_32
+#define _ASM_X86_DESC_H 1
+#endif
 
 #include <linux/linkage.h>
 #include <linux/screen_info.h>

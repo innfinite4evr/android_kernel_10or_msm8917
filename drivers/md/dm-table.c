@@ -11,6 +11,7 @@
 #include <linux/vmalloc.h>
 #include <linux/blkdev.h>
 #include <linux/namei.h>
+#include <linux/mount.h>
 #include <linux/ctype.h>
 #include <linux/string.h>
 #include <linux/slab.h>
@@ -462,6 +463,16 @@ void dm_put_device(struct dm_target *ti, struct dm_dev *d)
 	int found = 0;
 	struct list_head *devices = &ti->table->devices;
 	struct dm_dev_internal *dd;
+
+	if (!ti) {
+		DMERR("%s: dm_target pointer is NULL", __func__);
+		return;
+	}
+
+	if (!d) {
+		DMERR("%s: dm_dev pointer is NULL", __func__);
+		return;
+	}
 
 	list_for_each_entry(dd, devices, list) {
 		if (dd->dm_dev == d) {

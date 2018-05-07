@@ -1307,7 +1307,7 @@ static void namespace_unlock(void)
 
 	up_write(&namespace_sem);
 
-	synchronize_rcu();
+	synchronize_rcu_expedited();
 
 	while (!hlist_empty(&head)) {
 		mnt = hlist_entry(head.first, struct mount, mnt_hash);
@@ -1471,6 +1471,8 @@ static int do_umount(struct mount *mnt, int flags)
 	}
 	unlock_mount_hash();
 	namespace_unlock();
+	if (retval == -EBUSY)
+		global_filetable_delayed_print(mnt);
 	return retval;
 }
 

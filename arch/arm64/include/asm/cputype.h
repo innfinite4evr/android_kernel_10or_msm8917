@@ -32,11 +32,9 @@
 #define MPIDR_AFFINITY_LEVEL(mpidr, level) \
 	((mpidr >> MPIDR_LEVEL_SHIFT(level)) & MPIDR_LEVEL_MASK)
 
-#define read_cpuid(reg) ({						\
-	u64 __val;							\
-	asm("mrs	%0, " #reg : "=r" (__val));			\
-	__val;								\
-})
+#define MMFR0_16KGRAN_SIZE	15
+#define MMFR0_16KGRAN_SHFT	20
+#define MMFR0_EL1_16KGRAN_MASK	(MMFR0_16KGRAN_SIZE << MMFR0_16KGRAN_SHFT)
 
 #define MIDR_REVISION_MASK	0xf
 #define MIDR_REVISION(midr)	((midr) & MIDR_REVISION_MASK)
@@ -64,15 +62,29 @@
 
 #define ARM_CPU_IMP_ARM		0x41
 #define ARM_CPU_IMP_APM		0x50
+#define ARM_CPU_IMP_QCOM	0x51
 
-#define ARM_CPU_PART_AEM_V8	0xD0F
-#define ARM_CPU_PART_FOUNDATION	0xD00
-#define ARM_CPU_PART_CORTEX_A57	0xD07
-#define ARM_CPU_PART_CORTEX_A53	0xD03
+#define ARM_CPU_PART_AEM_V8		0xD0F
+#define ARM_CPU_PART_FOUNDATION		0xD00
+#define ARM_CPU_PART_CORTEX_A57		0xD07
+#define ARM_CPU_PART_CORTEX_A53		0xD03
+#define ARM_CPU_PART_CORTEX_A72		0xD08
+#define ARM_CPU_PART_CORTEX_A75	0xD0A
+#define ARM_CPU_PART_KRYO2XX_GOLD	0x800
+#define ARM_CPU_PART_KRYO2XX_SILVER	0x801
+#define QCOM_CPU_PART_KRYO		0x200
 
 #define APM_CPU_PART_POTENZA	0x000
 
 #ifndef __ASSEMBLY__
+
+#include <asm/sysreg.h>
+
+#define read_cpuid(reg) ({						\
+	u64 __val;							\
+	asm("mrs_s	%0, " __stringify(reg) : "=r" (__val));		\
+	__val;								\
+})
 
 /*
  * The CPU ID never changes at run time, so we might as well tell the
@@ -81,12 +93,12 @@
  */
 static inline u32 __attribute_const__ read_cpuid_id(void)
 {
-	return read_cpuid(MIDR_EL1);
+	return read_cpuid(SYS_MIDR_EL1);
 }
 
 static inline u64 __attribute_const__ read_cpuid_mpidr(void)
 {
-	return read_cpuid(MPIDR_EL1);
+	return read_cpuid(SYS_MPIDR_EL1);
 }
 
 static inline unsigned int __attribute_const__ read_cpuid_implementor(void)
@@ -101,9 +113,8 @@ static inline unsigned int __attribute_const__ read_cpuid_part_number(void)
 
 static inline u32 __attribute_const__ read_cpuid_cachetype(void)
 {
-	return read_cpuid(CTR_EL0);
+	return read_cpuid(SYS_CTR_EL0);
 }
-
 #endif /* __ASSEMBLY__ */
 
 #endif

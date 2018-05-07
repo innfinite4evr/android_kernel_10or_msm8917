@@ -390,6 +390,15 @@ struct usb_bus {
 	struct mon_bus *mon_bus;	/* non-null when associated */
 	int monitored;			/* non-zero when monitored */
 #endif
+	unsigned skip_resume:1;		/* All USB devices are brought into full
+					 * power state after system resume. It
+					 * is desirable for some buses to keep
+					 * their devices in suspend state even
+					 * after system resume. The devices
+					 * are resumed later when a remote
+					 * wakeup is detected or an interface
+					 * driver starts I/O.
+					 */
 };
 
 struct usb_dev_state;
@@ -725,6 +734,17 @@ static inline bool usb_device_no_sg_constraint(struct usb_device *udev)
 
 /* for drivers using iso endpoints */
 extern int usb_get_current_frame_number(struct usb_device *usb_dev);
+extern int usb_sec_event_ring_setup(struct usb_device *dev,
+	unsigned intr_num);
+extern int usb_sec_event_ring_cleanup(struct usb_device *dev,
+	unsigned intr_num);
+
+extern dma_addr_t
+usb_get_sec_event_ring_dma_addr(struct usb_device *dev,
+		unsigned intr_num);
+extern dma_addr_t usb_get_dcba_dma_addr(struct usb_device *dev);
+extern dma_addr_t usb_get_xfer_ring_dma_addr(struct usb_device *dev,
+	struct usb_host_endpoint *ep);
 
 /* Sets up a group of bulk endpoints to support multiple stream IDs. */
 extern int usb_alloc_streams(struct usb_interface *interface,
@@ -1479,6 +1499,7 @@ struct urb {
 	usb_complete_t complete;	/* (in) completion routine */
 	struct usb_iso_packet_descriptor iso_frame_desc[0];
 					/* (in) ISO ONLY */
+	void *priv_data;                /* (in) additional private data */
 };
 
 /* ----------------------------------------------------------------------- */
@@ -1876,8 +1897,11 @@ static inline int usb_translate_errors(int error_code)
 #define USB_DEVICE_REMOVE	0x0002
 #define USB_BUS_ADD		0x0003
 #define USB_BUS_REMOVE		0x0004
+#define USB_BUS_DIED		0x0005
 extern void usb_register_notify(struct notifier_block *nb);
 extern void usb_unregister_notify(struct notifier_block *nb);
+extern void usb_register_atomic_notify(struct notifier_block *nb);
+extern void usb_unregister_atomic_notify(struct notifier_block *nb);
 
 /* debugfs stuff */
 extern struct dentry *usb_debug_root;

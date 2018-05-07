@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
 #include "gcov.h"
 
 static int gcov_events_enabled;
@@ -119,8 +120,10 @@ void gcov_enable_events(void)
 	gcov_events_enabled = 1;
 
 	/* Perform event callback for previously registered entries. */
-	while ((info = gcov_info_next(info)))
+	while ((info = gcov_info_next(info))) {
 		gcov_event(GCOV_ADD, info);
+		cond_resched();
+	}
 
 	mutex_unlock(&gcov_lock);
 }

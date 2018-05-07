@@ -384,8 +384,12 @@ static int get_v4l2_plane32(struct v4l2_plane __user *up,
 	compat_ulong_t p;
 
 	if (copy_in_user(up, up32, 2 * sizeof(__u32)) ||
-	    copy_in_user(&up->data_offset, &up32->data_offset,
-			 sizeof(up->data_offset)))
+		copy_in_user(&up->data_offset, &up32->data_offset,
+				sizeof(__u32)) ||
+		copy_in_user(up->reserved, up32->reserved,
+				sizeof(up->reserved)) ||
+		copy_in_user(&up->length, &up32->length,
+				sizeof(__u32)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -416,8 +420,10 @@ static int put_v4l2_plane32(struct v4l2_plane __user *up,
 	unsigned long p;
 
 	if (copy_in_user(up32, up, 2 * sizeof(__u32)) ||
-	    copy_in_user(&up32->data_offset, &up->data_offset,
-			 sizeof(up->data_offset)))
+		copy_in_user(up32->reserved, up->reserved,
+				sizeof(up32->reserved)) ||
+		copy_in_user(&up32->data_offset, &up->data_offset,
+				sizeof(__u32)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -432,29 +438,10 @@ static int put_v4l2_plane32(struct v4l2_plane __user *up,
 		    put_user((compat_ulong_t)ptr_to_compat((__force void *)p),
 			     &up32->m.userptr))
 			return -EFAULT;
-		break;
-	case V4L2_MEMORY_DMABUF:
-		if (copy_in_user(&up32->m.fd, &up->m.fd, sizeof(up->m.fd)))
+	if (memory == V4L2_MEMORY_USERPTR)
+		if (copy_in_user(&up32->m.userptr, &up->m.userptr,
+					sizeof(compat_long_t)))
 			return -EFAULT;
-		break;
-	}
-
-	return 0;
-}
-
-static int bufsize_v4l2_buffer(struct v4l2_buffer32 __user *up, u32 *size)
-{
-	u32 type;
-	u32 length;
-
-	if (!access_ok(VERIFY_READ, up, sizeof(*up)) ||
-	    get_user(type, &up->type) ||
-	    get_user(length, &up->length))
-		return -EFAULT;
-
-	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-		if (length > VIDEO_MAX_PLANES)
-			return -EINVAL;
 
 		/*
 		 * We don't really care if userspace decides to kill itself
@@ -895,6 +882,9 @@ static int put_v4l2_ext_controls32(struct file *file,
 struct v4l2_event32 {
 	__u32				type;
 	union {
+		struct v4l2_event_vsync		vsync;
+		struct v4l2_event_ctrl		ctrl;
+		struct v4l2_event_frame_sync	frame_sync;
 		__u8			data[64];
 	} u;
 	__u32				pending;
@@ -1008,6 +998,7 @@ static long do_video_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	int compatible_arg = 1;
 	long err = 0;
 
+	memset(&karg, 0, sizeof(karg));
 	/* First, convert the command. */
 	switch (cmd) {
 	case VIDIOC_G_FMT32: cmd = VIDIOC_G_FMT; break;
