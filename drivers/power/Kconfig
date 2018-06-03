@@ -485,33 +485,6 @@ config BATTERY_BQ28400
 	  The device monitors the battery level (Relative-State-Of-Charge).
 	  The device is SBS compliant, providing battery info over I2C.
 
-config BQ2560X_CHARGER
-	  tristate "bq2560x charger driver"
-	  depends on I2C
-	  help
-	    Say Y to include support
-	    for bq2560x charger gauge driver for batteries.
-	    This driver source code implemented
-	    all functions bq2560x charger.
-
-config BQ27426_FG
-	  tristate "BQ27426 fuel gauge driver"
-	  depends on I2C
-	  help
-	    Say Y to include support
-	    for BQ27426 fuel gauge driver for batteries.
-	    This driver source code implemented
-	    all functions for BQ27426 fuel gauge.
-
-config CW2015_FG
-	  tristate "CW2015 fuel gauge driver"
-	  depends on I2C
-	  help
-	    Say Y to include support
-	    for CW2015 fuel gauge driver for batteries.
-	    This driver source code implemented
-	    all functions for CW2015 fuel gauge.
-
 config QPNP_CHARGER
 	tristate "QPNP Charger driver"
 	depends on SPMI || MSM_SPMI
@@ -533,6 +506,16 @@ config QPNP_SMBCHARGER
 	  The driver also offers relevant information to userspace via the
 	  power supply framework.
 
+config QPNP_SMB2
+	tristate "QPNP SMB Charger driver"
+	depends on SPMI || MSM_SPMI
+	depends on OF_SPMI
+	help
+	  Enables support for the SMB2 charging peripheral.
+	  This charger module supports Type-C and uUSB interface with
+	  autonomous charging and APSD for different charging sources.
+	  This module also interfaces USB PD for power-delivery support.
+
 config FUELGAUGE_STC3117
 	tristate "STC3117 fuel gauge driver"
 	default n
@@ -551,6 +534,16 @@ config QPNP_FG
 	  Say Y here to enable the Fuel Gauge driver. This adds support for
 	  battery fuel gauging and state of charge of battery connected to the
 	  fuel gauge. The state of charge is reported through a BMS power
+	  supply property and also sends uevents when the capacity is updated.
+
+config QPNP_FG_GEN3
+	tristate "QPNP GEN3 fuel gauge driver"
+	depends on SPMI || MSM_SPMI
+	depends on OF_SPMI
+	help
+	  Say Y here to enable the GEN3 Fuel Gauge driver. This adds support
+	  for battery fuel gauging and state of charge of battery connected to
+	  the fuel gauge. The state of charge is reported through a BMS power
 	  supply property and also sends uevents when the capacity is updated.
 
 config BATTERY_BCL

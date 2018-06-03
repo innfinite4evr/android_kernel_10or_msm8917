@@ -2154,64 +2154,7 @@ int usb_hcd_get_frame_number (struct usb_device *udev)
 	return hcd->driver->get_frame_number (hcd);
 }
 
-int usb_hcd_sec_event_ring_setup(struct usb_device *udev,
-	unsigned intr_num)
-{
-	struct usb_hcd	*hcd = bus_to_hcd(udev->bus);
-
-	if (!HCD_RH_RUNNING(hcd))
-		return 0;
-
-	return hcd->driver->sec_event_ring_setup(hcd, intr_num);
-}
-
-int usb_hcd_sec_event_ring_cleanup(struct usb_device *udev,
-	unsigned intr_num)
-{
-	struct usb_hcd	*hcd = bus_to_hcd(udev->bus);
-
-	if (!HCD_RH_RUNNING(hcd))
-		return 0;
-
-	return hcd->driver->sec_event_ring_cleanup(hcd, intr_num);
-}
-
 /*-------------------------------------------------------------------------*/
-
-dma_addr_t
-usb_hcd_get_sec_event_ring_dma_addr(struct usb_device *udev,
-	unsigned intr_num)
-{
-	struct usb_hcd	*hcd = bus_to_hcd(udev->bus);
-
-	if (!HCD_RH_RUNNING(hcd))
-		return 0;
-
-	return hcd->driver->get_sec_event_ring_dma_addr(hcd, intr_num);
-}
-
-dma_addr_t
-usb_hcd_get_dcba_dma_addr(struct usb_device *udev)
-{
-	struct usb_hcd	*hcd = bus_to_hcd(udev->bus);
-
-	if (!HCD_RH_RUNNING(hcd))
-		return 0;
-
-	return hcd->driver->get_dcba_dma_addr(hcd, udev);
-}
-
-dma_addr_t
-usb_hcd_get_xfer_ring_dma_addr(struct usb_device *udev,
-		struct usb_host_endpoint *ep)
-{
-	struct usb_hcd	*hcd = bus_to_hcd(udev->bus);
-
-	if (!HCD_RH_RUNNING(hcd))
-		return 0;
-
-	return hcd->driver->get_xfer_ring_dma_addr(hcd, udev, ep);
-}
 
 #ifdef	CONFIG_PM
 
@@ -2349,6 +2292,7 @@ void usb_hcd_resume_root_hub (struct usb_hcd *hcd)
 
 	spin_lock_irqsave (&hcd_root_hub_lock, flags);
 	if (hcd->rh_registered) {
+		pm_wakeup_event(&hcd->self.root_hub->dev, 0);
 		set_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
 		queue_work(pm_wq, &hcd->wakeup_work);
 	}
@@ -2980,6 +2924,7 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 	}
 
 	usb_put_invalidate_rhdev(hcd);
+	hcd->flags = 0;
 }
 EXPORT_SYMBOL_GPL(usb_remove_hcd);
 

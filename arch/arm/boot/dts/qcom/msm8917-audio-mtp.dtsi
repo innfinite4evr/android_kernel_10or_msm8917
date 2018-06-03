@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,23 +15,6 @@
 	status = "okay";
 	qcom,model = "msm8952-snd-card-mtp";
 	qcom,msm-hs-micbias-type = "external";
-
-        qcom,msm-mbhc-hphl-swh = <1>;
-        qcom,msm-mbhc-gnd-swh = <1>;
-        qcom,msm-micbias1-ext-cap;
-
-        qcom,audio-routing =
-            "RX_BIAS", "MCLK",
-            "SPK_RX_BIAS", "MCLK",
-            "INT_LDO_H", "MCLK",
-            "MIC BIAS External", "Handset Mic",
-            "MIC BIAS External2", "Headset Mic",
-            "MIC BIAS External", "Secondary Mic",
-            "AMIC1", "MIC BIAS External",
-            "AMIC2", "MIC BIAS External2",
-            "AMIC3", "MIC BIAS External",
-            "WSA_SPK OUT", "VDD_WSA_SWITCH",
-            "SpkrMono WSA_IN", "WSA_SPK OUT";
 };
 
 &pm8937_cajon_dig {
@@ -42,16 +25,8 @@
 	status = "okay";
 };
 
-&wsa881x_i2c_e {
-	status = "disabled";
-};
-
-&wsa881x_i2c_44 {
-	status = "okay";
-};
-
 &wsa881x_i2c_f {
-	status = "disabled";
+	status = "okay";
 };
 
 &wsa881x_i2c_45 {
