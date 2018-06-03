@@ -96,3 +96,12 @@ x509.genkey
 
 # Kconfig presets
 all.config
+
+# custom
+cb2.sh
+out
+OUT
+linaro-64
+zimage
+gcc-4.9
+ubertc-6.0
