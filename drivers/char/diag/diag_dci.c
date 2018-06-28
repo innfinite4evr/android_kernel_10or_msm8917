@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,6 +50,13 @@ unsigned int dci_max_reg = 100;
 unsigned int dci_max_clients = 10;
 struct mutex dci_log_mask_mutex;
 struct mutex dci_event_mask_mutex;
+
+struct dci_cmd_buf_t{
+	unsigned char buf[DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE];
+	int used_flag;
+} __packed;
+
+struct dci_cmd_buf_t dci_cmd_buf[MAX_DCI_CLIENTS];
 
 /*
  * DCI_HANDSHAKE_RETRY_TIME: Time to wait (in microseconds) before checking the
@@ -223,6 +230,7 @@ static void dci_chk_handshake(unsigned long data)
 
 static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 {
+	int i;
 	if (!buffer || buffer->data)
 		return -EINVAL;
 
@@ -239,7 +247,16 @@ static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 		break;
 	case DCI_BUF_CMD:
 		buffer->capacity = DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE;
-		buffer->data = kzalloc(buffer->capacity, GFP_KERNEL);
+		for(i=0;i<MAX_DCI_CLIENTS;i++){
+			if(dci_cmd_buf[i].used_flag == 0){
+				buffer->data = dci_cmd_buf[i].buf;
+				dci_cmd_buf[i].used_flag = 1;
+				break;
+			}
+		}
+		if(i >= MAX_DCI_CLIENTS){
+			panic("Diag DCI cannot allocate buffer\n");
+		}
 		if (!buffer->data)
 			return -ENOMEM;
 		break;
@@ -1363,8 +1380,6 @@ void diag_dci_notify_client(int peripheral_mask, int data, int proc)
 	struct siginfo info;
 	struct list_head *start, *temp;
 	struct diag_dci_client_tbl *entry = NULL;
-	struct pid *pid_struct = NULL;
-	struct task_struct *dci_task = NULL;
 
 	memset(&info, 0, sizeof(struct siginfo));
 	info.si_code = SI_QUEUE;
@@ -1382,32 +1397,20 @@ void diag_dci_notify_client(int peripheral_mask, int data, int proc)
 			continue;
 		if (entry->client_info.notification_list & peripheral_mask) {
 			info.si_signo = entry->client_info.signal_type;
-			pid_struct = find_get_pid(entry->tgid);
-			if (pid_struct) {
-				dci_task = get_pid_task(pid_struct,
-						PIDTYPE_PID);
-				if (!dci_task) {
-					DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-						"diag: dci client with pid = %d Exited..\n",
-						entry->tgid);
-					mutex_unlock(&driver->dci_mutex);
-					return;
-				}
-				if (entry->client &&
-					entry->tgid == dci_task->tgid) {
-					DIAG_LOG(DIAG_DEBUG_DCI,
-						"entry tgid = %d, dci client tgid = %d\n",
-						entry->tgid, dci_task->tgid);
-					stat = send_sig_info(
-						entry->client_info.signal_type,
-						&info, dci_task);
-					if (stat)
-						pr_err("diag: Err sending dci signal to client, signal data: 0x%x, stat: %d\n",
+			if (entry->client &&
+				entry->tgid == entry->client->tgid) {
+				DIAG_LOG(DIAG_DEBUG_DCI,
+					"entry tgid = %d, dci client tgid = %d\n",
+					entry->tgid, entry->client->tgid);
+				stat = send_sig_info(
+					entry->client_info.signal_type,
+					&info, entry->client);
+				if (stat)
+					pr_err("diag: Err sending dci signal to client, signal data: 0x%x, stat: %d\n",
 							info.si_int, stat);
-				} else
-					pr_err("diag: client data is corrupted, signal data: 0x%x, stat: %d\n",
+			} else
+				pr_err("diag: client data is corrupted, signal data: 0x%x, stat: %d\n",
 						info.si_int, stat);
-			}
 		}
 	}
 	mutex_unlock(&driver->dci_mutex);
@@ -2141,28 +2144,10 @@ struct diag_dci_client_tbl *dci_lookup_client_entry_pid(int tgid)
 {
 	struct list_head *start, *temp;
 	struct diag_dci_client_tbl *entry = NULL;
-	struct pid *pid_struct = NULL;
-	struct task_struct *task_s = NULL;
-
 	list_for_each_safe(start, temp, &driver->dci_client_list) {
 		entry = list_entry(start, struct diag_dci_client_tbl, track);
-		pid_struct = find_get_pid(entry->tgid);
-		if (!pid_struct) {
-			DIAG_LOG(DIAG_DEBUG_DCI,
-				"diag: valid pid doesn't exist for pid = %d\n",
-				entry->tgid);
-			continue;
-		}
-		task_s = get_pid_task(pid_struct, PIDTYPE_PID);
-		if (!task_s) {
-			DIAG_LOG(DIAG_DEBUG_DCI,
-				"diag: valid task doesn't exist for pid = %d\n",
-				entry->tgid);
-			continue;
-		}
-		if (task_s == entry->client)
-			if (entry->client->tgid == tgid)
-				return entry;
+		if (entry->client->tgid == tgid)
+			return entry;
 	}
 	return NULL;
 }
@@ -2799,8 +2784,6 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 		new_entry->num_buffers = 1;
 		break;
 	}
-
-	new_entry->buffers = NULL;
 	new_entry->real_time = MODE_REALTIME;
 	new_entry->in_service = 0;
 	INIT_LIST_HEAD(&new_entry->list_write_buf);
@@ -2874,8 +2857,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 
 fail_alloc:
 	if (new_entry) {
-		for (i = 0; ((i < new_entry->num_buffers) &&
-			new_entry->buffers); i++) {
+		for (i = 0; i < new_entry->num_buffers; i++) {
 			proc_buf = &new_entry->buffers[i];
 			if (proc_buf) {
 				mutex_destroy(&proc_buf->health_mutex);
@@ -2910,6 +2892,7 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 	struct list_head *start, *req_temp;
 	struct dci_pkt_req_entry_t *req_entry = NULL;
 	int token = DCI_LOCAL_PROC;
+	struct dci_cmd_buf_t *dci_cmd_temp = NULL;
 
 	if (!entry)
 		return DIAG_DCI_NOT_SUPPORTED;
@@ -2998,7 +2981,19 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 		mutex_unlock(&proc_buf->buf_primary->data_mutex);
 
 		mutex_lock(&proc_buf->buf_cmd->data_mutex);
-		kfree(proc_buf->buf_cmd->data);
+		if(proc_buf->buf_cmd->buf_type == DCI_BUF_CMD &&
+			proc_buf->buf_cmd->capacity == DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE){
+			dci_cmd_temp = (struct dci_cmd_buf_t *)proc_buf->buf_cmd->data;
+			if(dci_cmd_temp->used_flag == 1){
+				dci_cmd_temp->used_flag = 0;
+			}else{
+				panic("free a unallocated buffer\n");
+			}
+			memset(proc_buf->buf_cmd->data, 0, proc_buf->buf_cmd->capacity);
+		}else{
+			kfree(proc_buf->buf_cmd->data);
+		}
+		proc_buf->buf_cmd->data = NULL;
 		mutex_unlock(&proc_buf->buf_cmd->data_mutex);
 
 		mutex_destroy(&proc_buf->health_mutex);

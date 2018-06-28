@@ -918,6 +918,7 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 			sfp->low_dma = 1;
 			if ((0 == sfp->low_dma) && (0 == sg_res_in_use(sfp))) {
 				val = (int) sfp->reserve.bufflen;
+				mutex_lock(&sfp->parentdp->open_rel_lock);
 				sg_remove_scat(sfp, &sfp->reserve);
 				sg_build_reserve(sfp, val);
 				mutex_unlock(&sfp->parentdp->open_rel_lock);
@@ -988,13 +989,14 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 		result = get_user(val, ip);
 		if (result)
 			return result;
-		if (val < 0)
-			return -EINVAL;
+                if (val < 0)
+                        return -EINVAL;
 		val = min_t(int, val,
 			    max_sectors_bytes(sdp->device->request_queue));
 		if (val != sfp->reserve.bufflen) {
 			if (sg_res_in_use(sfp) || sfp->mmap_called)
 				return -EBUSY;
+			mutex_lock(&sfp->parentdp->open_rel_lock);
 			sg_remove_scat(sfp, &sfp->reserve);
 			sg_build_reserve(sfp, val);
 			mutex_unlock(&sfp->parentdp->open_rel_lock);
@@ -2690,9 +2692,6 @@ static void sg_proc_debug_helper(struct seq_file *s, Sg_device * sdp)
 			seq_puts(s, srp->done ?
 				 ((1 == srp->done) ?  "rcv:" : "fin:")
 				  : "act:");
-			seq_printf(s, srp->done ?
-				   ((1 == srp->done) ?  "rcv:" : "fin:")
-				   : "act:");
 			seq_printf(s, " id=%d blen=%d",
 				   srp->header.pack_id, blen);
 			if (srp->done)

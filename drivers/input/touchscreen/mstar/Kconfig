@@ -1,0 +1,14 @@
+#
+# mstar Touchscreen driver
+#
+config MSTAR_TOUCHSCREEN_DEBUG
+	tristate "mstar debug"
+	default n
+	help
+	  This is application debug interface support for mstar
+	  touchscreens.
+
+	  Say Y here if you want to have a Android app debug interface
+	  to your system.
+
+	  If unsure, say N.

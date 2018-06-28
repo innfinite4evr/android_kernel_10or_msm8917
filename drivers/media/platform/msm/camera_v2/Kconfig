@@ -28,6 +28,16 @@ config MSM_CCI
           bus. It is also responsible for synchronization with
           GPIO and data frames.
 
+config GC5025
+  bool "Sensor GC5025 (BAYER 5M)"
+  depends on MSMB_CAMERA
+  default y
+  ---help---
+    Galaxycore 5 MP Bayer Sensor,
+    preview set to 2592*1944 at 30 fps,
+    snapshot set to 2592*1944 at 30 fps,
+    This sensor driver does not support auto focus.
+    
 config MSM_CSI20_HEADER
         bool "Qualcomm MSM CSI 2.0 Header"
         depends on MSMB_CAMERA
