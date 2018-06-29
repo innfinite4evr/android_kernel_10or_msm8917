@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,7 +25,6 @@
 #include <sound/pcm.h>
 #include <sound/jack.h>
 #include <sound/q6afe-v2.h>
-#include <sound/q6core.h>
 #include <soc/qcom/socinfo.h>
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "msm-audio-pinctrl.h"
@@ -94,9 +93,9 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = false,
 	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
+	.key_code[1] = KEY_VOLUMEUP,    //modified by Quanyu.Lee
+	.key_code[2] = KEY_VOLUMEDOWN,  //modified by Quanyu.Lee
+	.key_code[3] = 0,               //modified by Quanyu.Lee
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
@@ -1168,11 +1167,6 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 		 substream->name, substream->stream);
 
-	if (!q6core_is_adsp_ready()) {
-		pr_err("%s(): adsp not ready\n", __func__);
-		return -EINVAL;
-	}
-
 	/*
 	 * configure the slave select to
 	 * invalid state for internal codec
@@ -1223,7 +1217,6 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	return ret;
 }
-
 static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	int ret;
@@ -1263,11 +1256,6 @@ static int msm_prim_auxpcm_startup(struct snd_pcm_substream *substream)
 
 	pr_debug("%s(): substream = %s\n",
 			__func__, substream->name);
-
-	if (!q6core_is_adsp_ready()) {
-		pr_err("%s(): adsp not ready\n", __func__);
-		return -EINVAL;
-	}
 
 	/* mux config to route the AUX MI2S */
 	if (pdata->vaddr_gpio_mux_mic_ctl) {
@@ -1335,12 +1323,6 @@ static int msm_sec_mi2s_snd_startup(struct snd_pcm_substream *substream)
 					__func__);
 		return 0;
 	}
-
-	if (!q6core_is_adsp_ready()) {
-		pr_err("%s(): adsp not ready\n", __func__);
-		return -EINVAL;
-	}
-
 	if ((pdata->ext_pa & SEC_MI2S_ID) == SEC_MI2S_ID) {
 		if (pdata->vaddr_gpio_mux_spkr_ctl) {
 			val = ioread32(pdata->vaddr_gpio_mux_spkr_ctl);
@@ -1414,12 +1396,6 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 				substream->name, substream->stream);
-
-	if (!q6core_is_adsp_ready()) {
-		pr_err("%s(): adsp not ready\n", __func__);
-		return -EINVAL;
-	}
-
 	if (pdata->vaddr_gpio_mux_mic_ctl) {
 		val = ioread32(pdata->vaddr_gpio_mux_mic_ctl);
 		val = val | 0x02020002;
@@ -1478,12 +1454,6 @@ static int msm_quin_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 				substream->name, substream->stream);
-
-	if (!q6core_is_adsp_ready()) {
-		pr_err("%s(): adsp not ready\n", __func__);
-		return -EINVAL;
-	}
-
 	if (pdata->vaddr_gpio_mux_quin_ctl) {
 		val = ioread32(pdata->vaddr_gpio_mux_quin_ctl);
 		val = val | 0x00000001;
@@ -1545,7 +1515,7 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8952_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+	S(v_hs_max, 1600); /*modified by Quanyu.Lee at 17/5/18 for more headphone compatibility*/
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8952_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1568,17 +1538,18 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
-	btn_low[0] = 75;
-	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
-	btn_low[2] = 225;
-	btn_high[2] = 225;
-	btn_low[3] = 450;
-	btn_high[3] = 450;
-	btn_low[4] = 500;
-	btn_high[4] = 500;
-
+/*modified by Quanyu.Lee at 17/5/18 copied from P2200 for MBHC keys*/
+        btn_low[0] = 75;
+        btn_high[0] = 75;
+        btn_low[1] = 200;  /*formal 150*/
+        btn_high[1] = 200; /*formal 150*/
+        btn_low[2] = 450;  /*formal 225*/
+        btn_high[2] = 450; /*formal 225*/
+        btn_low[3] = 500;  /*formal 450*/
+        btn_high[3] = 500; /*formal 450*/
+        btn_low[4] = 500;
+        btn_high[4] = 500;
+/**********************modifiy ended here****************************/
 	return msm8952_wcd_cal;
 }
 
@@ -2287,81 +2258,6 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		/* this dai link has playback support */
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_QCHAT,
-	},
-	{/* hw:x,38 */
-		.name = "MSM8X16 Compress10",
-		.stream_name = "Compress10",
-		.cpu_dai_name	= "MultiMedia17",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA17,
-	},
-	{/* hw:x,39 */
-		.name = "MSM8X16 Compress11",
-		.stream_name = "Compress11",
-		.cpu_dai_name	= "MultiMedia18",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA18,
-	},
-	{/* hw:x,40 */
-		.name = "MSM8X16 Compress12",
-		.stream_name = "Compress12",
-		.cpu_dai_name	= "MultiMedia19",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA19,
-	},
-	{/* hw:x,41 */
-		.name = "MSM8X16 Compress13",
-		.stream_name = "Compress13",
-		.cpu_dai_name	= "MultiMedia28",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA28,
-	},
-	{/* hw:x,42 */
-		.name = "MSM8X16 Compress14",
-		.stream_name = "Compress14",
-		.cpu_dai_name	= "MultiMedia29",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA29,
 	},
 	/* Backend I2S DAI Links */
 	{
