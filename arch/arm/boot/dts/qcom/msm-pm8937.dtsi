@@ -101,11 +101,11 @@
 				/* MPP2 - PA_THERM config */
 				reg = <0xa100 0x100>;
 				qcom,pin-num = <2>;
-				qcom,mode = <4>; /* AIN input */
-				qcom,invert = <1>; /* Enable MPP */
-				qcom,ain-route = <1>; /* AMUX 6 */
-				qcom,master-en = <1>;
-				qcom,src-sel = <0>; /* Function constant */
+				qcom,mode = <4>; 		/* AIN input */
+				qcom,invert = <1>;		/* Enable PIN INVERT */
+				qcom,master-en = <1>;  	/* Enable MPP */
+				qcom,src-sel = <5>; 	/* DTEST2 */
+				qcom,vin-sel = <3>;
 			};
 
 			mpp@a200 {
@@ -362,6 +362,27 @@
 			};
 		};
 
+		qcom,leds@a100 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xa100 0x100>;
+			label = "mpp";
+			qcom,led_mpp_2{
+                label = "mpp";
+                linux,name = "green";
+                linux,default-trigger = "none";
+                qcom,default-state = "off";
+                qcom,max-current = <40>;
+                qcom,current-setting = <5>;
+                qcom,id = <6>;
+                qcom,mode = "pwm";
+                qcom,source-sel = <10>;	/* DTEST2 */
+                qcom,mode-ctrl = <0x60>;	/* current sink */
+				qcom,pwm-channel = <0>;
+				qcom,pwm-us = <100>; /* setup 100us as default pwm period */
+                pwms = <&pm8937_pwm 0 0>;
+				pwm-names = "green";
+            };
+		};
 	};
 
 	pm8937_1: qcom,pm8937@1 {
@@ -371,13 +392,15 @@
 		#size-cells = <1>;
 
 		pm8937_pwm: pwm@bc00 {
-			status = "disabled";
+			status = "okay";
 			compatible = "qcom,qpnp-pwm";
 			reg = <0xbc00 0x100>;
 			reg-names = "qpnp-lpg-channel-base";
 			qcom,channel-id = <0>;
 			qcom,supported-sizes = <6>, <9>;
 			#pwm-cells = <2>;
+			qcom,dtest-line = <2>;	/* use DTEST2 */
+			qcom,dtest-output = <2>;	/* use DTEST2 */
 		};
 	};
 };
