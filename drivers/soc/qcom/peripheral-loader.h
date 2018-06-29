@@ -44,7 +44,6 @@ struct pil_desc {
 	const char *name;
 	const char *fw_name;
 	struct device *dev;
-	struct subsys_device *subsys_dev;
 	const struct pil_reset_ops *ops;
 	struct module *owner;
 	unsigned long proxy_timeout;
@@ -88,7 +87,7 @@ struct pil_image_info {
  */
 struct pil_reset_ops {
 	int (*init_image)(struct pil_desc *pil, const u8 *metadata,
-			  size_t size,  phys_addr_t addr, size_t sz);
+			  size_t size);
 	int (*mem_setup)(struct pil_desc *pil, phys_addr_t addr, size_t size);
 	int (*verify_blob)(struct pil_desc *pil, phys_addr_t phy_addr,
 			   size_t size);
