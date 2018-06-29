@@ -183,3 +183,14 @@
 	qcom,bad-battery-detection-enable;
 	qcom,hold-soc-while-full;
 };
+
+&firmware {
+	android {
+		fstab {
+			/delete-node/ vendor;
+			system {
+				dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
+			};
+		};
+	};
+};
