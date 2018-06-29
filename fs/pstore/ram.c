@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/compiler.h>
 #include <linux/pstore_ram.h>
+#include <linux/memblock.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
@@ -305,24 +306,6 @@ static int notrace ramoops_pstore_write_buf(enum pstore_type_id type,
 	return 0;
 }
 
-static int notrace ramoops_pstore_write_buf_user(enum pstore_type_id type,
-						 enum kmsg_dump_reason reason,
-						 u64 *id, unsigned int part,
-						 const char __user *buf,
-						 bool compressed, size_t size,
-						 struct pstore_info *psi)
-{
-	if (type == PSTORE_TYPE_PMSG) {
-		struct ramoops_context *cxt = psi->data;
-
-		if (!cxt->mprz)
-			return -ENOMEM;
-		return persistent_ram_write_user(cxt->mprz, buf, size);
-	}
-
-	return -EINVAL;
-}
-
 static int ramoops_pstore_erase(enum pstore_type_id type, u64 id, int count,
 				struct timespec time, struct pstore_info *psi)
 {
@@ -361,7 +344,6 @@ static struct ramoops_context oops_cxt = {
 		.open	= ramoops_pstore_open,
 		.read	= ramoops_pstore_read,
 		.write_buf	= ramoops_pstore_write_buf,
-		.write_buf_user	= ramoops_pstore_write_buf_user,
 		.erase	= ramoops_pstore_erase,
 	},
 };
@@ -409,7 +391,7 @@ static int ramoops_init_przs(struct device *dev, struct ramoops_context *cxt,
 
 		cxt->przs[i] = persistent_ram_new(*paddr, sz, 0,
 						  &cxt->ecc_info,
-						  cxt->memtype, 0);
+						  cxt->memtype);
 		if (IS_ERR(cxt->przs[i])) {
 			err = PTR_ERR(cxt->przs[i]);
 			dev_err(dev, "failed to request mem region (0x%zx@0x%llx): %d\n",
@@ -439,8 +421,7 @@ static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 		return -ENOMEM;
 	}
 
-	*prz = persistent_ram_new(*paddr, sz, sig, &cxt->ecc_info,
-				  cxt->memtype, 0);
+	*prz = persistent_ram_new(*paddr, sz, sig, &cxt->ecc_info, cxt->memtype);
 	if (IS_ERR(*prz)) {
 		int err = PTR_ERR(*prz);
 
@@ -483,6 +464,9 @@ static int ramoops_probe(struct platform_device *pdev)
 			"non-zero\n");
 		goto fail_out;
 	}
+
+	if (pdata->mem_size && !is_power_of_2(pdata->mem_size))
+		pdata->mem_size = rounddown_pow_of_two(pdata->mem_size);
 
 	if (pdata->record_size && !is_power_of_2(pdata->record_size))
 		pdata->record_size = rounddown_pow_of_two(pdata->record_size);
@@ -644,6 +628,44 @@ static void ramoops_register_dummy(void)
 			PTR_ERR(dummy));
 	}
 }
+
+static struct ramoops_platform_data ramoops_data;
+
+static struct platform_device ramoops_dev  = {
+	.name = "ramoops",
+	.dev = {
+		.platform_data = &ramoops_data,
+	},
+};
+
+static int __init ramoops_memreserve(char *p)
+{
+	unsigned long size = 0;
+
+	if (!p)
+		return 1;
+
+	size = memparse(p, &p) & PAGE_MASK;
+	ramoops_data.mem_size = size;
+	ramoops_data.mem_address = memblock_end_of_DRAM() - size;
+	ramoops_data.console_size = size / 4;
+	ramoops_data.pmsg_size = size / 2;
+	ramoops_data.dump_oops = 1;
+	ramoops_data.record_size = size /4;
+
+	memblock_reserve(ramoops_data.mem_address, ramoops_data.mem_size);
+
+	return 0;
+}
+early_param("ramoops_memreserve", ramoops_memreserve);
+
+static int __init msm_register_ramoops_device(void)
+{
+	if (platform_device_register(&ramoops_dev))
+		pr_info("Unable to register ramoops platform device\n");
+    return 0;
+}
+core_initcall(msm_register_ramoops_device);
 
 static int __init ramoops_init(void)
 {
