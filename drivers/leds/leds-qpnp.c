@@ -250,6 +250,14 @@
 #define NUM_KPDBL_LEDS			4
 #define KPDBL_MASTER_BIT_INDEX		0
 
+#define LCT_MPP_LED
+
+#ifdef LCT_MPP_LED
+#define BLINK_PERIOD_US 2000000 /* 2000000us as a pwm period for blink */
+#define BRIGHT_PERIOD_US 100    /* 100us as pwm period for long bright */
+#define BLINK_DUTY_US 500000    /* 500000us as a pwm duty for blink */
+#endif
+
 /**
  * enum qpnp_leds - QPNP supported led ids
  * @QPNP_ID_WLED - White led backlight
@@ -561,6 +569,7 @@ static struct pwm_device *kpdbl_master;
 static u32 kpdbl_master_period_us;
 DECLARE_BITMAP(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
 static bool is_kpdbl_master_turn_on;
+static struct led_classdev *g_led_green_cdev = NULL;
 
 static int
 qpnp_led_masked_write(struct qpnp_led_data *led, u16 addr, u8 mask, u8 val)
@@ -2187,6 +2196,18 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 	return 0;
 }
 
+static ssize_t pwm_us_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+    struct qpnp_led_data *led;
+    struct led_classdev *led_cdev = dev_get_drvdata(dev);
+
+    led = container_of(led_cdev, struct qpnp_led_data, cdev);
+    return snprintf(buf, 50, "%d\n",
+        led->mpp_cfg->pwm_cfg->pwm_period_us);
+}
+
 static ssize_t pwm_us_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2656,6 +2677,97 @@ static void led_blink(struct qpnp_led_data *led,
 	mutex_unlock(&led->lock);
 }
 
+#ifdef LCT_MPP_LED
+static void lct_led_set(struct led_classdev *led_cdev,
+    enum led_brightness value)
+{
+    struct qpnp_led_data *led;
+    struct pwm_config_data *pwm_cfg;
+    int ret = -EINVAL;
+    u32 previous_pwm_us;
+
+    led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+    if (value < LED_OFF) {
+        dev_err(&led->spmi_dev->dev, "Invalid brightness value\n");
+        return;
+    }
+
+    /* set pwm period 100us for long bright */
+    pwm_cfg = led->mpp_cfg->pwm_cfg;
+    previous_pwm_us = pwm_cfg->pwm_period_us;
+    pwm_cfg->pwm_period_us = BRIGHT_PERIOD_US;
+    pwm_free(pwm_cfg->pwm_dev);
+    ret = qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+    if (ret) {
+        pwm_cfg->pwm_period_us = previous_pwm_us;
+        pwm_free(pwm_cfg->pwm_dev);
+        qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+        qpnp_led_set(&led->cdev, value);
+        dev_err(&led->spmi_dev->dev,
+            "Failed to initialize pwm with new pwm_us value\n");
+        return;
+    }
+    qpnp_led_set(&led->cdev, value);
+}
+
+static void lct_led_blink(struct qpnp_led_data *led,
+    struct pwm_config_data *pwm_cfg)
+{
+    ssize_t ret = -EINVAL;
+    u32 previous_pwm_us;
+
+    flush_work(&led->work);
+    mutex_lock(&led->lock);
+
+    /* brightness as a pmw duty for blink function */
+    led->cdev.brightness = led->cdev.brightness ? ((BLINK_DUTY_US * LED_FULL) / BLINK_PERIOD_US) : 0;
+    previous_pwm_us = pwm_cfg->pwm_period_us;
+
+    if (led->cdev.brightness)
+        pwm_cfg->pwm_period_us = BLINK_PERIOD_US;
+    else
+        pwm_cfg->pwm_period_us = BRIGHT_PERIOD_US;
+
+    pwm_free(pwm_cfg->pwm_dev);
+    ret = qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+    if (ret) {
+        pwm_cfg->pwm_period_us = previous_pwm_us;
+        pwm_free(pwm_cfg->pwm_dev);
+        qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+        qpnp_mpp_set(led);
+        dev_err(&led->spmi_dev->dev,
+            "Failed to initialize pwm with new pwm_us value\n");
+        return;
+    }
+    qpnp_mpp_set(led);
+    mutex_unlock(&led->lock);
+}
+
+void set_led_green(bool on)
+{
+    if (g_led_green_cdev != NULL) {
+        if (on)
+            lct_led_set(g_led_green_cdev, LED_FULL);
+        else
+            lct_led_set(g_led_green_cdev, LED_OFF);
+    }
+}
+EXPORT_SYMBOL_GPL(set_led_green);
+#endif
+
+static ssize_t blink_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+    struct qpnp_led_data *led;
+    struct led_classdev *led_cdev = dev_get_drvdata(dev);
+
+    led = container_of(led_cdev, struct qpnp_led_data, cdev);
+    return snprintf(buf, 50, "%d\n",
+        led->mpp_cfg->pwm_cfg->blinking);
+}
+
 static ssize_t blink_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2673,7 +2785,15 @@ static ssize_t blink_store(struct device *dev,
 
 	switch (led->id) {
 	case QPNP_ID_LED_MPP:
+#ifdef LCT_MPP_LED
+        lct_led_blink(led, led->mpp_cfg->pwm_cfg);
+        if (blinking)
+            led->mpp_cfg->pwm_cfg->blinking = true;
+        else
+            led->mpp_cfg->pwm_cfg->blinking = false;
+#else
 		led_blink(led, led->mpp_cfg->pwm_cfg);
+#endif
 		break;
 	case QPNP_ID_RGB_RED:
 	case QPNP_ID_RGB_GREEN:
@@ -2692,14 +2812,14 @@ static ssize_t blink_store(struct device *dev,
 
 static DEVICE_ATTR(led_mode, 0664, NULL, led_mode_store);
 static DEVICE_ATTR(strobe, 0664, NULL, led_strobe_type_store);
-static DEVICE_ATTR(pwm_us, 0664, NULL, pwm_us_store);
+static DEVICE_ATTR(pwm_us, 0664, pwm_us_show, pwm_us_store);
 static DEVICE_ATTR(pause_lo, 0664, NULL, pause_lo_store);
 static DEVICE_ATTR(pause_hi, 0664, NULL, pause_hi_store);
 static DEVICE_ATTR(start_idx, 0664, NULL, start_idx_store);
 static DEVICE_ATTR(ramp_step_ms, 0664, NULL, ramp_step_ms_store);
 static DEVICE_ATTR(lut_flags, 0664, NULL, lut_flags_store);
 static DEVICE_ATTR(duty_pcts, 0664, NULL, duty_pcts_store);
-static DEVICE_ATTR(blink, 0664, NULL, blink_store);
+static DEVICE_ATTR(blink, 0664, blink_show, blink_store);
 
 static struct attribute *led_attrs[] = {
 	&dev_attr_led_mode.attr,
@@ -3930,8 +4050,11 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 				" rc = %d\n", rc);
 			goto fail_id_check;
 		}
-
-		led->cdev.brightness_set    = qpnp_led_set;
+#ifdef LCT_MPP_LED
+        led->cdev.brightness_set    = lct_led_set;
+#else
+        led->cdev.brightness_set    = qpnp_led_set;
+#endif
 		led->cdev.brightness_get    = qpnp_led_get;
 
 		if (strncmp(led_label, "wled", sizeof("wled")) == 0) {
@@ -4034,6 +4157,13 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 
 		}
 
+#ifdef LCT_MPP_LED
+        rc = sysfs_create_group(&led->cdev.dev->kobj,
+            &blink_attr_group);
+        if (rc)
+            goto fail_id_check;
+#endif
+
 		if (led->id == QPNP_ID_LED_MPP) {
 			if (!led->mpp_cfg->pwm_cfg)
 				break;
@@ -4118,6 +4248,10 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 		} else
 			led->cdev.brightness = LED_OFF;
 
+		if (strncmp(led->cdev.name, "green", strlen("green")) == 0) {
+            g_led_green_cdev = &led->cdev;
+        }
+
 		parsed_leds++;
 	}
 	dev_set_drvdata(&spmi->dev, led_array);
@@ -4150,6 +4284,12 @@ static int qpnp_leds_remove(struct spmi_device *spmi)
 		if (led_array[i].in_order_command_processing)
 			destroy_workqueue(led_array[i].workqueue);
 		led_classdev_unregister(&led_array[i].cdev);
+
+#ifdef LCT_MPP_LED
+        sysfs_remove_group(&led_array[i].cdev.dev->\
+            kobj, &blink_attr_group);
+#endif
+
 		switch (led_array[i].id) {
 		case QPNP_ID_WLED:
 			break;

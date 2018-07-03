@@ -555,12 +555,12 @@ static int32_t msm_flash_init_prepare(
 
 	flash_data_k.cfg.flash_init_info = &flash_init_info;
 	if (copy_from_user(&flash_init_info,
-		(void *)(flash_data->cfg.flash_init_info),
-		sizeof(struct msm_flash_init_info_t))) {
-		pr_err("%s copy_from_user failed %d\n",
-			__func__, __LINE__);
-		return -EFAULT;
-	}
+			(void *)(flash_data->cfg.flash_init_info),
+			sizeof(struct msm_flash_init_info_t))) {
+			pr_err("%s copy_from_user failed %d\n",
+				__func__, __LINE__);
+			return -EFAULT;
+		}
 	return msm_flash_init(flash_ctrl, &flash_data_k);
 #endif
 }
@@ -947,6 +947,7 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	struct msm_flash_ctrl_t *fctrl)
 {
 	int32_t rc = 0;
+	int32_t flash_driver_type = -1;
 
 	CDBG("called\n");
 
@@ -962,9 +963,31 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 		return rc;
 	}
 
-	CDBG("subdev id %d\n", fctrl->subdev_id);
+	pr_err("*******************Brave****cell-index = %d\n",fctrl->pdev->id);
 
 	fctrl->flash_driver_type = FLASH_DRIVER_DEFAULT;
+
+	/* Read the flash_driver_type */
+	rc = of_property_read_u32(of_node, "qcom,flash-type", &flash_driver_type);
+	if (rc < 0) {
+		pr_err("failed rc %d\n", rc);
+	}
+	pr_err("*******************Brave****flash-type = %d \n",flash_driver_type);
+	switch(flash_driver_type){
+		case 1:
+			fctrl->flash_driver_type = FLASH_DRIVER_PMIC;
+			break;
+		case 2:
+			fctrl->flash_driver_type = FLASH_DRIVER_I2C;
+			break;
+		case 3:
+			fctrl->flash_driver_type = FLASH_DRIVER_GPIO;
+			break;
+		default:
+			fctrl->flash_driver_type = FLASH_DRIVER_DEFAULT;
+			break;
+	}
+	pr_err("flash_driver_type %d", fctrl->flash_driver_type);
 
 	/* Read the CCI master. Use M0 if not available in the node */
 	rc = of_property_read_u32(of_node, "qcom,cci-master",
@@ -977,14 +1000,6 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 		rc = 0;
 	} else {
 		fctrl->flash_driver_type = FLASH_DRIVER_I2C;
-	}
-
-	/* Read the flash and torch source info from device tree node */
-	rc = msm_flash_get_pmic_source_info(of_node, fctrl);
-	if (rc < 0) {
-		pr_err("%s:%d msm_flash_get_pmic_source_info failed rc %d\n",
-			__func__, __LINE__, rc);
-		return rc;
 	}
 
 	/* Read the gpio information from device tree */
@@ -1001,6 +1016,13 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	CDBG("%s:%d fctrl->flash_driver_type = %d", __func__, __LINE__,
 		fctrl->flash_driver_type);
 
+	/* Read the flash and torch source info from device tree node */
+	rc = msm_flash_get_pmic_source_info(of_node, fctrl);
+	if (rc < 0) {
+		pr_err("%s:%d msm_flash_get_pmic_source_info failed rc %d\n",
+			__func__, __LINE__, rc);
+		return rc;
+	}
 	return rc;
 }
 
@@ -1027,13 +1049,13 @@ static long msm_flash_subdev_do_ioctl(
 	sd = vdev_to_v4l2_subdev(vdev);
 	u32 = (struct msm_flash_cfg_data_t32 *)arg;
 
+	flash_data.cfg_type = u32->cfg_type;
+	for (i = 0; i < MAX_LED_TRIGGERS; i++) {
+		flash_data.flash_current[i] = u32->flash_current[i];
+		flash_data.flash_duration[i] = u32->flash_duration[i];
+	}
 	switch (cmd) {
 	case VIDIOC_MSM_FLASH_CFG32:
-		flash_data.cfg_type = u32->cfg_type;
-		for (i = 0; i < MAX_LED_TRIGGERS; i++) {
-			flash_data.flash_current[i] = u32->flash_current[i];
-			flash_data.flash_duration[i] = u32->flash_duration[i];
-		}
 		cmd = VIDIOC_MSM_FLASH_CFG;
 		switch (flash_data.cfg_type) {
 		case CFG_FLASH_OFF:
@@ -1066,9 +1088,6 @@ static long msm_flash_subdev_do_ioctl(
 			break;
 		}
 		break;
-	case VIDIOC_MSM_FLASH_CFG:
-		pr_err("invalid cmd 0x%x received\n", cmd);
-		return -EINVAL;
 	default:
 		return msm_flash_subdev_ioctl(sd, cmd, arg);
 	}

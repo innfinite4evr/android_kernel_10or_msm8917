@@ -25,6 +25,8 @@ DEFINE_MSM_MUTEX(msm_eeprom_mutex);
 #ifdef CONFIG_COMPAT
 static struct v4l2_file_operations msm_eeprom_v4l2_subdev_fops;
 #endif
+uint16_t check_id=0;
+int qcom_module_id;
 
 /**
   * msm_get_read_mem_size - Get the total size for allocation
@@ -135,6 +137,47 @@ static uint32_t msm_eeprom_match_crc(struct msm_eeprom_memory_block_t *data)
 	return ret;
 }
 
+static int hi1332_otp_readmode_initial(struct msm_eeprom_ctrl_t *e_ctrl)
+{
+	int rc = 0;
+	uint32_t snsid_addr = 0x0f16;
+	uint16_t sensor_id;
+
+	e_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+
+	rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read(&(e_ctrl->i2c_client),
+			snsid_addr, &sensor_id, 2);
+	pr_err("<3>""%s: sensor_id = 0x%x \n", __func__, sensor_id);
+	if(sensor_id == 0x3213)
+	{
+		rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write_table(&(e_ctrl->i2c_client),
+                &hi1332_otp_read_init_setting);
+	}
+	else {
+              pr_err("%s:%d other sensor otp", __func__, __LINE__);
+              return -1;
+        }
+	if (rc < 0) {
+		pr_err("<3>""%s: otp read mode initial setting failed\n", __func__);
+		return rc;
+	}
+	return rc;
+}
+
+  static void hynix556_otp_readmode_initial(struct msm_eeprom_ctrl_t *e_ctrl)
+{
+	int rc = 0;
+	uint32_t snsid_addr = 0x0f16;
+	uint16_t sensor_id;
+    
+	e_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+
+	rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read(&(e_ctrl->i2c_client),
+			snsid_addr, &sensor_id, 2);
+	check_id = sensor_id;
+	CDBG("%s: sensor_id = 0x%x \n", __func__, sensor_id);
+
+}
 /**
   * read_eeprom_memory() - read map data into buffer
   * @e_ctrl:	eeprom control struct
@@ -147,10 +190,11 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 	struct msm_eeprom_memory_block_t *block)
 {
 	int rc = 0;
-	int j;
+	int j,i,otp_idx;
 	struct msm_eeprom_memory_map_t *emap = block->map;
 	struct msm_eeprom_board_info *eb_info;
 	uint8_t *memptr = block->mapdata;
+	uint16_t otp_addr = 0x0501;
 
 	if (!e_ctrl) {
 		pr_err("%s e_ctrl is NULL", __func__);
@@ -158,6 +202,8 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 	}
 
 	eb_info = e_ctrl->eboard_info;
+
+	hi1332_otp_readmode_initial(e_ctrl);
 
 	for (j = 0; j < block->num_map; j++) {
 		if (emap[j].saddr.addr) {
@@ -174,6 +220,8 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 				&(e_ctrl->i2c_client), emap[j].page.addr,
 				emap[j].page.data, emap[j].page.data_t);
 				msleep(emap[j].page.delay);
+			CDBG("<3>""%s:reg_addr 0x%x data 0x%x delay %d \n", __func__,
+					emap[j].page.addr, emap[j].page.data, emap[j].page.delay);
 			if (rc < 0) {
 				pr_err("%s: page write failed\n", __func__);
 				return rc;
@@ -203,15 +251,53 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 		}
 
 		if (emap[j].mem.valid_size) {
-			e_ctrl->i2c_client.addr_type = emap[j].mem.addr_t;
+			 if (!strcmp(eb_info->eeprom_name, "gc5025_holitech"))
+			{
+			
+	        e_ctrl->i2c_client.addr_type = emap[j].mem.addr_t;
+			for (i = 0; i <emap[j].mem.valid_size ; i++)
+			{
 			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
 				&(e_ctrl->i2c_client), emap[j].mem.addr,
-				memptr, emap[j].mem.valid_size);
+				memptr,1);
+			if (rc < 0) {
+				pr_err("%s: read failed\n", __func__);
+				return rc;
+			}
+			 memptr ++;
+           }  
+          } 
+			else if (!strcmp(eb_info->eeprom_name, "hi1332")){
+			e_ctrl->i2c_client.addr_type = emap[j].mem.addr_t;
+			CDBG("<3>""%s:read data size %d \n", __func__, emap[j].mem.valid_size);
+			for (otp_idx = 0; otp_idx < emap[j].mem.valid_size; otp_idx++) {
+				rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+					&(e_ctrl->i2c_client), 0x70A, (otp_addr>>8)&0xff, 1);
+				rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+					&(e_ctrl->i2c_client), 0x70B, otp_addr&0xff, 1);
+				rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+					&(e_ctrl->i2c_client), 0x702, 0x01, 1);
+				rc =  e_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
+					&(e_ctrl->i2c_client), 0x708, memptr, 1);
+			if (rc < 0) {
+		                pr_err("%s: read failed\n", __func__);
+		                return rc;
+			}
+			otp_addr++;
+			memptr++;
+			 }
+			}
+			else{
+               e_ctrl->i2c_client.addr_type = emap[j].mem.addr_t;
+                       rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
+                               &(e_ctrl->i2c_client), emap[j].mem.addr,
+                               memptr, emap[j].mem.valid_size);
 			if (rc < 0) {
 				pr_err("%s: read failed\n", __func__);
 				return rc;
 			}
 			memptr += emap[j].mem.valid_size;
+		  }
 		}
 		if (emap[j].pageen.valid_size) {
 			e_ctrl->i2c_client.addr_type = emap[j].pageen.addr_t;
@@ -657,7 +743,7 @@ static int msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 		if (e_ctrl->userspace_probe == 0) {
 			pr_err("%s:%d Eeprom already probed at kernel boot",
 				__func__, __LINE__);
-			rc = -EINVAL;
+			rc = 0;
 			break;
 		}
 		if (e_ctrl->cal_data.num_data == 0) {
@@ -1174,8 +1260,8 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 		if (rc < 0) {
 			CDBG("%s: eeprom not matching %d\n", __func__, rc);
 			goto power_down;
-		}
-		/* read eeprom */
+		
+}		/* read eeprom */
 		if (e_ctrl->cal_data.map) {
 			rc = read_eeprom_memory(e_ctrl, &e_ctrl->cal_data);
 			if (rc < 0) {
@@ -1518,7 +1604,7 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 		if (e_ctrl->userspace_probe == 0) {
 			pr_err("%s:%d Eeprom already probed at kernel boot",
 				__func__, __LINE__);
-			rc = -EINVAL;
+			rc = 0;
 			break;
 		}
 		if (e_ctrl->cal_data.num_data == 0) {
@@ -1709,13 +1795,18 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 		rc = msm_eeprom_parse_memory_map(of_node, &e_ctrl->cal_data);
 		if (rc < 0)
 			goto board_free;
-
+                if (!strcmp(e_ctrl->eboard_info->eeprom_name, "gc5025_holitech")&&(check_id == 0x0556))
+                   	goto board_free;
 		rc = msm_camera_power_up(power_info, e_ctrl->eeprom_device_type,
 			&e_ctrl->i2c_client);
 		if (rc) {
 			pr_err("failed rc %d\n", rc);
 			goto memdata_free;
 		}
+		if (!strcmp(e_ctrl->eboard_info->eeprom_name, "hi556_truly"))
+                     hynix556_otp_readmode_initial(e_ctrl);
+                if (!strcmp(e_ctrl->eboard_info->eeprom_name, "hi556_truly")&&(check_id != 0x0556))
+                	goto power_down;
 		rc = read_eeprom_memory(e_ctrl, &e_ctrl->cal_data);
 		if (rc < 0) {
 			pr_err("%s read_eeprom_memory failed\n", __func__);
@@ -1724,6 +1815,11 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 		for (j = 0; j < e_ctrl->cal_data.num_data; j++)
 			CDBG("memory_data[%d] = 0x%X\n", j,
 				e_ctrl->cal_data.mapdata[j]);
+
+		if (!strcmp(eb_info->eeprom_name, "hi1332")) {
+			qcom_module_id = e_ctrl->cal_data.mapdata[1];
+			pr_err("Brave: OTP is hi1332, qcom_module_id=%d\n", qcom_module_id);
+		}
 
 		e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);
 
