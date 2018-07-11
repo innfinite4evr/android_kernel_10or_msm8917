@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -38,6 +38,94 @@
 	};
 };
 
+&i2c_3 {
+    status = "ok";
+    clock-frequency = <400000>;
+    mstar@26{                                                                                                                                                                            
+        compatible = "mstar,msg2xxx";
+        reg = <0x26>;
+        //interrupt-parent = <&msm_gpio>;
+        //interrupts = <13 0x2008>;
+        mstar,rst-gpio = <&tlmm 64 0x0>;
+        mstar,irq-gpio =  <&tlmm 65 0x0>;
+        vdd-supply =  <&pm8917_l10>;
+        vcc_i2c-supply =  <&pm8917_l5>;
+        pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+        pinctrl-0 = <&ts_int_active &ts_reset_active>;
+        pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+        pinctrl-2 = <&ts_release>;
+    };  
+	
+focaltech@38{ 
+	compatible = "focaltech,fts";	
+	reg = <0x38>;  					
+	interrupt-parent = <&tlmm>;				
+	interrupts = <65 0x02>;
+	vdd-supply =  <&pm8917_l10>;
+	vcc_i2c-supply =  <&pm8917_l5>;
+	focaltech,reset-gpio = <&tlmm 64 0x0>; 
+	focaltech,irq-gpio = <&tlmm 65 0x0>; 	
+	focaltech,max-touch-number = <5>;			
+	focaltech,display-coords =  <0 0 720 1280>;	 
+#if 0
+	focaltech,have-key;
+	focaltech,key-number = <3>;	
+	focaltech,keys = <139 102 158>; 	
+	focaltech,key-y-coord = <2000>; 
+	focaltech,key-x-coords = <200 600 800>;
+#endif
+};
+
+
+
+};
+
+&tlmm {
+        tps65132-en-pin {
+                qcom,pins = "gpio12", "gpio13";
+                qcom,num-grp-pins = <2>;
+                label = "tps65132_en_pins";
+                qcom,pin-func = <0>;
+
+                tps65132_en_default: en-default {
+                        drive-strength = <2>;
+                        bias-pull-down;
+                };
+        };
+};
+&i2c_6{ /* BLSP2 QUP2 */
+        tps65132@3e {
+                compatible = "ti,tps65132";
+                reg = <0x3e>;
+                i2c-pwr-supply = <&pm8917_l6>;
+                ti,en-gpio-lpm;
+                pinctrl-names = "default";
+                pinctrl-0 = <&tps65132_en_default>;
+
+                regulators {
+                        tps65132_pos: pos-boost {
+                                regulator-name = "tps65132-pos";
+                                regulator-min-microvolt = <5000000>;
+                                regulator-max-microvolt = <5000000>;
+                                ti,discharge-enable;
+                                ti,enable-time = <800>;
+                                ti,current-limit = <200000>;
+                                ti,en-gpio = <&tlmm 12 0>;
+                        };
+
+                        tps65132_neg: neg-boost {
+                                regulator-name = "tps65132-neg";
+                                regulator-min-microvolt = <5000000>;
+                                regulator-max-microvolt = <5000000>;
+                                ti,discharge-enable;
+                                ti,enable-time = <800>;
+                                ti,current-limit = <40000>;
+                                ti,en-gpio = <&tlmm 13 0>;
+                        };
+                };
+        };
+};
+
 &soc {
 	gpio_keys {
 		compatible = "gpio-keys";
@@ -45,22 +133,6 @@
 		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
-
-		camera_focus {
-			label = "camera_focus";
-			gpios = <&tlmm 128 0x1>;
-			linux,input-type = <1>;
-			linux,code = <0x210>;
-			debounce-interval = <15>;
-		};
-
-		camera_snapshot {
-			label = "camera_snapshot";
-			gpios = <&tlmm 127 0x1>;
-			linux,input-type = <1>;
-			linux,code = <0x2fe>;
-			debounce-interval = <15>;
-		};
 
 		vol_up {
 			label = "volume_up";
@@ -82,8 +154,39 @@
 		qcom,dig-vtg-min = <1800000>;
 		qcom,dig-vtg-max = <1800000>;
 	};
-};
 
+	vibrator_gpio {
+		compatible = "qcom,vibrator-gpio";
+		qcom,vibrator-timeout-ms = <15000>;
+		qcom,vib-gpio_one = <&tlmm 9 0x00>;
+		label = "vibrator";
+	};
+
+	gpio-leds {
+		compatible = "gpio-leds";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_led_off>;
+
+		red {
+			 gpios = <&tlmm 19 0>;
+			 label = "red";
+			 linux,default-trigger = "none";
+			 default-state = "off";
+			 retain-state-suspended;
+		};
+	};
+
+	sar_input {
+		compatible = "qcom,sar_input";
+		pinctrl-names = "default";
+		pinctrl-0 = <&kongkou_on>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <98 0x2>;
+		qcom,sar_input_gpio_irq = <&tlmm 98 0x00>;
+	};
+};
+/*
 &flash_led {
 	compatible = "qcom,qpnp-flash-led";
 	reg = <0xd300 0x100>;
@@ -104,7 +207,7 @@
 	qcom,lra-high-z="opt1";
 	qcom,lra-res-cal-period = <0>;
 };
-
+*/
 &blsp1_uart2 {
 	status = "ok";
 	pinctrl-names = "default";
@@ -122,20 +225,27 @@
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_truly_720_vid>;
+	qcom,regulator-ldo-mode;
+	qcom,dsi-pref-prim-pan = <&dsi_djn_nt35521_720p_video>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 
 	qcom,platform-te-gpio = <&tlmm 24 0>;
 	qcom,platform-reset-gpio = <&tlmm 60 0>;
-	qcom,platform-bklight-en-gpio = <&tlmm 98 0>;
+	lab-supply = <&tps65132_pos>;
+	ibb-supply = <&tps65132_neg>;
+	//qcom,platform-bklight-en-gpio = <&tlmm 98 0>;
 };
 
-&dsi_truly_720_vid {
+&dsi_djn_nt35521_720p_video {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	qcom,mdss-dsi-pan-enable-dynamic-fps;
-	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	//qcom,mdss-dsi-pan-enable-dynamic-fps;
+	//qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+};
+
+&dsi_kd_otm1289a_720p_video {
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &dsi_truly_720_cmd {
@@ -143,12 +253,6 @@
 	qcom,ulps-enabled;
 	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <2 2 2 2 2 2>;
-};
-
-&dsi_icn9706_720_1440_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	qcom,mdss-dsi-pan-enable-dynamic-fps;
-	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 };
 
 &sdhc_1 {
@@ -207,4 +311,24 @@
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
 
 	status = "ok";
+};
+
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@2 {
+		reg = <2>;
+		qcom,supply-name = "lab";
+		qcom,supply-min-voltage = <5000000>;
+		qcom,supply-max-voltage = <5000000>;
+		qcom,supply-enable-load = <200>;
+		qcom,supply-disable-load = <0>;
+	};
+
+	qcom,panel-supply-entry@3 {
+		reg = <3>;
+		qcom,supply-name = "ibb";
+		qcom,supply-min-voltage = <5000000>;
+		qcom,supply-max-voltage = <5000000>;
+		qcom,supply-enable-load = <40>;
+		qcom,supply-disable-load = <0>;
+	};
 };
