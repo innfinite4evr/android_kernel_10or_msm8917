@@ -3,3 +3,5 @@ out
 linaro-64
 zimage
 gcc-4.9
+*.sh
+
