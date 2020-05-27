@@ -96,3 +96,10 @@ x509.genkey
 
 # Kconfig presets
 all.config
+
+
+# cust
+*.sh
+out
+zimage
+
