@@ -87,11 +87,6 @@ unsigned int compat_elf_hwcap2 __read_mostly;
 
 DECLARE_BITMAP(cpu_hwcaps, ARM64_NCAPS);
 
-unsigned int boot_reason;
-EXPORT_SYMBOL(boot_reason);
-
-unsigned int cold_boot;
-EXPORT_SYMBOL(cold_boot);
 
 static const char *cpu_name;
 static const char *machine_name;
