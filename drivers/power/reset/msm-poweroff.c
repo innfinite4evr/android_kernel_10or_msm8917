@@ -60,7 +60,7 @@ static void scm_disable_sdi(void);
 * There is no API from TZ to re-enable the registers.
 * So the SDI cannot be re-enabled when it already by-passed.
 */
-static int download_mode = 1;
+static int download_mode = 0;
 #else
 static const int download_mode;
 #endif
@@ -296,6 +296,10 @@ static void msm_restart_prepare(const char *cmd)
 	} else {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 	}
+
+	if (in_panic)
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+	else
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {

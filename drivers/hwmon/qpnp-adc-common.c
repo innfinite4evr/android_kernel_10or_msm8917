@@ -626,6 +626,43 @@ static const struct qpnp_vadc_map_pt adcmap_100k_104ef_104fb_1875_vref[] = {
 	{ 46,	125 },
 };
 
+static const struct qpnp_vadc_map_pt adcmap_10k_atl_batt_therm[] = {
+	{ 1712,	-40 },
+	{ 1686,	-35 },
+	{ 1654,	-30 },
+	{ 1615,	-25 },
+	{ 1570,	-20 },
+	{ 1517,	-15 },
+	{ 1457,	-10 },
+	{ 1390,	-5 },
+	{ 1316,	0 },
+	{ 1238,	5 },
+	{ 1155,	10 },
+	{ 1070,	15 },
+	{ 985,	20 },
+	{ 900,	25 },
+	{ 817,	30 },
+	{ 738,	35 },
+	{ 663,	40 },
+	{ 593,	45 },
+	{ 529,	50 },
+	{ 470,	55 },
+	{ 417,	60 },
+	{ 370,	65 },
+	{ 328,	70 },
+	{ 291,	75 },
+	{ 257,	80 },
+	{ 228,	85 },
+	{ 203,	90 },
+	{ 180,	95 },
+	{ 160,	100 },
+	{ 142,	105 },
+	{ 127,	110 },
+	{ 113,	115 },
+	{ 101,	120 },
+	{ 91,	125 },
+};
+
 static int32_t qpnp_adc_map_voltage_temp(const struct qpnp_vadc_map_pt *pts,
 		uint32_t tablesize, int32_t input, int64_t *output)
 {
@@ -772,7 +809,6 @@ int32_t qpnp_adc_scale_pmic_therm(struct qpnp_vadc_chip *vadc,
 			chan_properties->offset_gain_numerator * 2);
 	} else
 		adc_chan_result->measurement = 0;
-
 	/* Change to .001 deg C */
 	adc_chan_result->measurement -= KELVINMIL_DEGMIL;
 	adc_chan_result->physical = (int32_t) adc_chan_result->measurement;
@@ -1068,7 +1104,6 @@ int32_t qpnp_adc_scale_therm_pu2(struct qpnp_vadc_chip *chip,
 			ARRAY_SIZE(adcmap_100k_104ef_104fb),
 			therm_voltage, &adc_chan_result->physical);
 	}
-
 	return 0;
 }
 EXPORT_SYMBOL(qpnp_adc_scale_therm_pu2);
@@ -1131,6 +1166,25 @@ int32_t qpnp_adc_tm_scale_therm_voltage_pu2(struct qpnp_vadc_chip *chip,
 	return 0;
 }
 EXPORT_SYMBOL(qpnp_adc_tm_scale_therm_voltage_pu2);
+
+int32_t qpnp_adc_scale_therm_pu3(struct qpnp_vadc_chip *chip,
+		int32_t adc_code,
+		const struct qpnp_adc_properties *adc_properties,
+		const struct qpnp_vadc_chan_properties *chan_properties,
+		struct qpnp_vadc_result *adc_chan_result)
+{
+	int64_t therm_voltage = 0;
+
+	qpnp_adc_scale_with_calib_param(adc_code,
+		adc_properties, chan_properties, &therm_voltage);
+
+	qpnp_adc_map_voltage_temp(adcmap_10k_atl_batt_therm,
+		ARRAY_SIZE(adcmap_10k_atl_batt_therm),
+		therm_voltage, &adc_chan_result->physical);
+
+	return 0;
+}
+EXPORT_SYMBOL(qpnp_adc_scale_therm_pu3);
 
 int32_t qpnp_adc_scale_therm_ncp03(struct qpnp_vadc_chip *chip,
 		int32_t adc_code,

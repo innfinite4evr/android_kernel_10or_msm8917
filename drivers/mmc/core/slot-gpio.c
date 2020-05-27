@@ -212,6 +212,8 @@ int mmc_gpio_request_cd(struct mmc_host *host, unsigned int gpio,
 		 */
 		return ret;
 
+	gpio_export(gpio, 0);
+
 	if (debounce) {
 		ret = gpio_set_debounce(gpio, debounce);
 		if (ret < 0)

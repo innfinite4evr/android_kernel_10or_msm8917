@@ -51,6 +51,13 @@ unsigned int dci_max_clients = 10;
 struct mutex dci_log_mask_mutex;
 struct mutex dci_event_mask_mutex;
 
+struct dci_cmd_buf_t{
+	unsigned char buf[DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE];
+	int used_flag;
+} __packed;
+
+struct dci_cmd_buf_t dci_cmd_buf[MAX_DCI_CLIENTS];
+
 /*
  * DCI_HANDSHAKE_RETRY_TIME: Time to wait (in microseconds) before checking the
  * connection status again.
@@ -223,6 +230,7 @@ static void dci_chk_handshake(unsigned long data)
 
 static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 {
+	int i;
 	if (!buffer || buffer->data)
 		return -EINVAL;
 
@@ -239,7 +247,16 @@ static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 		break;
 	case DCI_BUF_CMD:
 		buffer->capacity = DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE;
-		buffer->data = kzalloc(buffer->capacity, GFP_KERNEL);
+		for(i=0;i<MAX_DCI_CLIENTS;i++){
+			if(dci_cmd_buf[i].used_flag == 0){
+				buffer->data = dci_cmd_buf[i].buf;
+				dci_cmd_buf[i].used_flag = 1;
+				break;
+			}
+		}
+		if(i >= MAX_DCI_CLIENTS){
+			panic("Diag DCI cannot allocate buffer\n");
+		}
 		if (!buffer->data)
 			return -ENOMEM;
 		break;
@@ -2875,6 +2892,7 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 	struct list_head *start, *req_temp;
 	struct dci_pkt_req_entry_t *req_entry = NULL;
 	int token = DCI_LOCAL_PROC;
+	struct dci_cmd_buf_t *dci_cmd_temp = NULL;
 
 	if (!entry)
 		return DIAG_DCI_NOT_SUPPORTED;
@@ -2963,7 +2981,19 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 		mutex_unlock(&proc_buf->buf_primary->data_mutex);
 
 		mutex_lock(&proc_buf->buf_cmd->data_mutex);
-		kfree(proc_buf->buf_cmd->data);
+		if(proc_buf->buf_cmd->buf_type == DCI_BUF_CMD &&
+			proc_buf->buf_cmd->capacity == DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE){
+			dci_cmd_temp = (struct dci_cmd_buf_t *)proc_buf->buf_cmd->data;
+			if(dci_cmd_temp->used_flag == 1){
+				dci_cmd_temp->used_flag = 0;
+			}else{
+				panic("free a unallocated buffer\n");
+			}
+			memset(proc_buf->buf_cmd->data, 0, proc_buf->buf_cmd->capacity);
+		}else{
+			kfree(proc_buf->buf_cmd->data);
+		}
+		proc_buf->buf_cmd->data = NULL;
 		mutex_unlock(&proc_buf->buf_cmd->data_mutex);
 
 		mutex_destroy(&proc_buf->health_mutex);
