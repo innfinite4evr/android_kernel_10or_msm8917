@@ -1148,7 +1148,6 @@ config TOUCHSCREEN_MSTAR
           If unsure, say N.
 
 source "drivers/input/touchscreen/mstar/Kconfig"
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 
 endif
