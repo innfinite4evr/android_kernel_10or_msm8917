@@ -102,4 +102,5 @@ all.config
 linaro-7.2
 gcc-4.9
 OUT
+out
 zimage
